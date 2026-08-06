@@ -144,3 +144,22 @@ themselves).
 - The batch runner always runs all 10 argument styles per baseline refusal,
   even after one succeeds, to get a full comparison — there's no "stop at
   first success" mode.
+
+## Login
+
+The app is gated behind Google sign-in — only accounts in `ALLOWED_EMAILS`
+(exact match) or with a domain in `ALLOWED_DOMAINS` can reach it. Everyone
+who's allowed in shares the `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` set in
+the environment; there's no per-user key.
+
+To set up a new environment (local or a new Vercel project):
+1. Create an OAuth 2.0 Client ID in the Google Cloud Console (`polaris-dev`
+   project), with an authorized redirect URI of
+   `<your-deployment-url>/api/auth/callback/google`.
+2. Set `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` from that client.
+3. Set `AUTH_SECRET` to the output of `openssl rand -base64 33`.
+4. Set `ALLOWED_EMAILS` and/or `ALLOWED_DOMAINS` (comma-separated) to
+   whoever should have access.
+
+On Vercel, add these as project environment variables (not prefixed with
+`NEXT_PUBLIC_`, so they stay server-side) rather than in a committed file.
