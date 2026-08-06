@@ -1,0 +1,20 @@
+{
+  "name": "scenario-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "batch-eval": "node scripts/batch-eval.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "js-yaml": "^4.1.0",
+    "next": "14.2.35",
+    "openai": "^7.2.0",
+    "react": "^18",
+    "react-dom": "^18"
+  }
+}
