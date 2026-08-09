@@ -459,3 +459,91 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* Scenario form */
+textarea {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  width: 100%;
+  resize: vertical;
+}
+.form-field {
+  margin-bottom: 16px;
+}
+.form-field input[type="text"],
+.form-field select {
+  width: 100%;
+}
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+.form-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.error-summary {
+  background: var(--danger-bg);
+  color: #6b1f1b;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  margin-bottom: 16px;
+}
+.error-summary ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.kv-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.kv-row input[type="text"] {
+  flex: 1;
+}
+.kv-row select {
+  width: 160px;
+}
+.kv-nested {
+  margin-left: 24px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+.tool-form-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.tool-form-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tool-form-head input[type="text"] {
+  flex: 1;
+}
+.add-btn {
+  font-size: 12.5px;
+}
