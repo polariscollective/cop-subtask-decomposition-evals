@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import RunTranscriptModal from "../components/RunTranscriptModal";
 import ScenarioDetailModal from "../components/ScenarioDetailModal";
 import { MODEL_CATALOG } from "../../lib/models";
+import { aggregateSamples } from "../../lib/compare-aggregate.js";
 
 const SCENARIOS = [
   { id: "corporate_log_consolidation_v0", title: "Corporate log consolidation" },
@@ -72,6 +73,11 @@ export default function ComparePage() {
   // completed study would fill in.
   const [hideEmptyStyles, setHideEmptyStyles] = useState(true);
   const [hideEmptyModels, setHideEmptyModels] = useState(true);
+  // Empty set = "everyone" / "every batch" (the default) — never a
+  // fallback-to-everyone safety net like the style/model hide toggles
+  // have; an explicit empty-result selection must show an empty grid.
+  const [selectedCreators, setSelectedCreators] = useState(new Set());
+  const [selectedBatches, setSelectedBatches] = useState(new Set());
 
   useEffect(() => {
     fetch("/api/compare")
@@ -83,35 +89,100 @@ export default function ComparePage() {
       .catch((e) => setError(e.message));
   }, []);
 
-  const index = useMemo(() => {
-    const m = new Map();
-    for (const r of rows || []) m.set([r.pipeline, r.model, r.scenario, r.style].join("|"), r);
-    return m;
+  // Every creator/batch that appears anywhere in the (already
+  // human-only, per Task 3) dataset — used to render the filter
+  // controls. Batches are scoped to whichever creators are currently
+  // selected (all of them, by default).
+  const availableCreators = useMemo(() => {
+    const set = new Set();
+    for (const r of rows || []) for (const s of r.samples) if (s.user_email) set.add(s.user_email);
+    return [...set].sort();
   }, [rows]);
 
+  const availableBatches = useMemo(() => {
+    const set = new Set();
+    for (const r of rows || []) {
+      for (const s of r.samples) {
+        if (selectedCreators.size === 0 || selectedCreators.has(s.user_email)) set.add(s.batch_id);
+      }
+    }
+    return [...set].sort();
+  }, [rows, selectedCreators]);
+
+  // Re-aggregates every combo's samples down to just the active
+  // creator/batch selection (empty selection = everyone / every batch),
+  // using the exact same best-of-N math the API applies server-side —
+  // see lib/compare-aggregate.js. A combo with zero matching samples
+  // after filtering drops out entirely (its cell goes back to "n/a").
+  // Every other derived value below (index, stats, empty-style/model
+  // detection, the bottom table) reads this instead of raw `rows`, so
+  // the whole page stays consistent under the active filter.
+  const filteredRows = useMemo(() => {
+    if (!rows) return rows;
+    return rows
+      .map((combo) => {
+        const samples = combo.samples.filter(
+          (s) =>
+            (selectedCreators.size === 0 || selectedCreators.has(s.user_email)) &&
+            (selectedBatches.size === 0 || selectedBatches.has(s.batch_id))
+        );
+        return aggregateSamples(samples);
+      })
+      .filter(Boolean);
+  }, [rows, selectedCreators, selectedBatches]);
+
+  const index = useMemo(() => {
+    const m = new Map();
+    for (const r of filteredRows || []) m.set([r.pipeline, r.model, r.scenario, r.style].join("|"), r);
+    return m;
+  }, [filteredRows]);
+
   const stats = useMemo(() => {
-    if (!rows) return null;
-    const withData = rows.filter((r) => r.model);
+    if (!filteredRows) return null;
+    const withData = filteredRows.filter((r) => r.model);
     const completed = withData.filter((r) => r.completed).length;
     const anyProgress = withData.filter((r) => r.depth > 0).length;
     return { total: withData.length, completed, anyProgress };
-  }, [rows]);
+  }, [filteredRows]);
 
   function cellData(pipeline, model, scenario, style) {
     return index.get([pipeline, model, scenario, style].join("|")) || null;
   }
 
+  // Changing which creators are in scope invalidates any specific batch
+  // selection made under the old scope, so it resets to "all batches"
+  // rather than silently keeping ids that may no longer apply.
+  function toggleCreator(email) {
+    setSelectedCreators((prev) => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email);
+      else next.add(email);
+      return next;
+    });
+    setSelectedBatches(new Set());
+  }
+
+  function toggleBatch(batchId) {
+    setSelectedBatches((prev) => {
+      const next = new Set(prev);
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
+      return next;
+    });
+  }
+
   // "Empty" = not a single run anywhere (any pipeline, any scenario, any
-  // model/style) — computed across the whole dataset, not per scenario
-  // section, so a style hidden here is truly untouched everywhere.
+  // model/style) in the currently filtered data — computed across the
+  // whole dataset, not per scenario section, so a style hidden here is
+  // truly untouched everywhere within the active creator/batch scope.
   const emptyStyles = useMemo(() => {
-    const present = new Set((rows || []).map((r) => r.style));
+    const present = new Set((filteredRows || []).map((r) => r.style));
     return new Set(STYLES.filter((s) => !present.has(s)));
-  }, [rows]);
+  }, [filteredRows]);
   const emptyModels = useMemo(() => {
-    const present = new Set((rows || []).map((r) => r.model));
+    const present = new Set((filteredRows || []).map((r) => r.model));
     return new Set(ALL_MODELS.filter((m) => !present.has(m)));
-  }, [rows]);
+  }, [filteredRows]);
 
   // Never actually hide everything — if the filter would leave zero rows
   // (e.g. no data loaded yet), fall back to the full list instead of
@@ -191,6 +262,40 @@ export default function ComparePage() {
               <input type="checkbox" checked={hideEmptyModels} onChange={(e) => setHideEmptyModels(e.target.checked)} />
               Hide models with no data ({emptyModels.size})
             </label>
+            {availableCreators.length > 0 && (
+              <div className="cmp-legend-group">
+                <span>Creator</span>
+                {availableCreators.map((email) => (
+                  <button
+                    key={email}
+                    type="button"
+                    className={`cmp-creator-pill${selectedCreators.has(email) ? " active" : ""}`}
+                    onClick={() => toggleCreator(email)}
+                  >
+                    {email}
+                  </button>
+                ))}
+              </div>
+            )}
+            {availableBatches.length > 0 && (
+              <details className="cmp-legend-group cmp-batch-details">
+                <summary className="cmp-toggle">
+                  Batch ({selectedBatches.size || "all"} of {availableBatches.length})
+                </summary>
+                <div className="cmp-batch-list">
+                  {availableBatches.map((batchId) => (
+                    <label key={batchId}>
+                      <input
+                        type="checkbox"
+                        checked={selectedBatches.has(batchId)}
+                        onChange={() => toggleBatch(batchId)}
+                      />
+                      {batchId}
+                    </label>
+                  ))}
+                </div>
+              </details>
+            )}
             <div className="cmp-stats">
               <span>
                 <strong>{stats.total}</strong> runs
@@ -343,7 +448,7 @@ export default function ComparePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...rows]
+                  {[...filteredRows]
                     .sort((a, b) => a.scenario.localeCompare(b.scenario) || a.pipeline.localeCompare(b.pipeline) || (a.model || "").localeCompare(b.model || ""))
                     .map((r, i) => (
                       <tr key={i}>
