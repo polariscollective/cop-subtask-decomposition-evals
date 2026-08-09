@@ -69,10 +69,18 @@ async function runAttempt(attempt, { scenario, maxTurns, state, log }) {
     attempt.status = "done";
     attempt.error = null;
   } catch (err) {
-    if (err instanceof BudgetExceededError) throw err;
     attempt.status = "error";
     attempt.error = err.message || String(err);
     await persist();
+    if (err instanceof BudgetExceededError) {
+      // A budget stop still stops the whole batch (the caller catches this
+      // below) — but the attempt it interrupted has to be recorded as
+      // errored first. Left at "running", it stays that way in the manifest
+      // forever, and GET /api/batch/status eventually mislabels a clean,
+      // immediate budget stop as "stalled — no update in 30 minutes".
+      await saveState(state);
+      throw err;
+    }
   }
   await saveState(state);
 }
