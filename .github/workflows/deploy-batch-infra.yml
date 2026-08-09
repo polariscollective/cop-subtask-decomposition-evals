@@ -1,0 +1,76 @@
+name: Deploy Batch Infra
+
+on:
+  push:
+    branches: [main]
+    paths: ["Dockerfile", "scripts/**", "lib/**", "scenarios/**", "services/batch-trigger/**"]
+
+env:
+  REGION: europe-west1
+  PROJECT: polaris-prod-499213
+  REGISTRY: europe-west1-docker.pkg.dev/genial-broker-499211-s1/polaris-docker
+
+jobs:
+  deploy-runner:
+    name: Build & Deploy Batch Runner Job
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SA }}
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/cop-batch-runner:${{ github.sha }}
+            ${{ env.REGISTRY }}/cop-batch-runner:latest
+      - name: Deploy to Cloud Run Job
+        run: |
+          gcloud run jobs update cop-batch-runner \
+            --image=${{ env.REGISTRY }}/cop-batch-runner:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --project=${{ env.PROJECT }}
+
+  deploy-trigger:
+    name: Build & Deploy Trigger Proxy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SA }}
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/batch-trigger
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/cop-batch-trigger:${{ github.sha }}
+            ${{ env.REGISTRY }}/cop-batch-trigger:latest
+      - name: Deploy to Cloud Run Service
+        run: |
+          gcloud run services update cop-batch-trigger \
+            --image=${{ env.REGISTRY }}/cop-batch-trigger:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --project=${{ env.PROJECT }}
