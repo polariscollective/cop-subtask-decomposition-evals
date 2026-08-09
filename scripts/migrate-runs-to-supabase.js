@@ -30,12 +30,13 @@ async function migrateRuns(supabase) {
   for (const filename of files) {
     if (alreadyMigrated.has(filename)) {
       // Still need the mapping for the batch-manifest pass below.
-      const { data: existing } = await supabase
+      const { data: existing, error: lookupErr } = await supabase
         .from("runs")
         .select("id")
         .eq("legacy_filename", filename)
         .single();
-      if (existing) filenameToId.set(filename, existing.id);
+      if (lookupErr) throw new Error(`Failed to look up already-migrated run ${filename}: ${lookupErr.message}`);
+      filenameToId.set(filename, existing.id);
       continue;
     }
 
