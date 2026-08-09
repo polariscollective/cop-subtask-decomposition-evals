@@ -75,6 +75,14 @@ export async function GET() {
     (r) => (r.data?.run_kind === "linear" || r.data?.run_kind === "chained") && isAllowedEmail(r.user_email)
   );
 
+  const excluded = (rows || []).filter(
+    (r) => (r.data?.run_kind === "linear" || r.data?.run_kind === "chained") && !isAllowedEmail(r.user_email)
+  );
+  if (excluded.length > 0) {
+    const emails = [...new Set(excluded.map((r) => r.user_email))];
+    console.warn(`/api/compare: excluded ${excluded.length} run(s) from unrecognized account(s): ${emails.join(", ")}`);
+  }
+
   // A run's batch (the `batches` row for its batch_id) tracks each
   // attempt's live status ("pending" | "running" | "done" | "error") while
   // the batch script is still working through its matrix — this is how the

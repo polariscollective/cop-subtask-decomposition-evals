@@ -103,7 +103,7 @@ export default function ComparePage() {
     const set = new Set();
     for (const r of rows || []) {
       for (const s of r.samples) {
-        if (selectedCreators.size === 0 || selectedCreators.has(s.user_email)) set.add(s.batch_id);
+        if ((selectedCreators.size === 0 || selectedCreators.has(s.user_email)) && s.batch_id) set.add(s.batch_id);
       }
     }
     return [...set].sort();
@@ -160,6 +160,7 @@ export default function ComparePage() {
       return next;
     });
     setSelectedBatches(new Set());
+    setModalCombo(null);
   }
 
   function toggleBatch(batchId) {
@@ -169,6 +170,7 @@ export default function ComparePage() {
       else next.add(batchId);
       return next;
     });
+    setModalCombo(null);
   }
 
   // "Empty" = not a single run anywhere (any pipeline, any scenario, any
@@ -270,6 +272,7 @@ export default function ComparePage() {
                     key={email}
                     type="button"
                     className={`cmp-creator-pill${selectedCreators.has(email) ? " active" : ""}`}
+                    aria-pressed={selectedCreators.has(email)}
                     onClick={() => toggleCreator(email)}
                   >
                     {email}
