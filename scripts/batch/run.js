@@ -1,8 +1,10 @@
 import { runAdversarialNegotiation, continueAdversarialNegotiation } from "../../lib/adversarial.js";
-import { buildPlannerSystemPrompt, planAcceptance } from "../../lib/planner.js";
+import { buildPlannerSystemPrompt, makePlanAcceptance } from "../../lib/planner.js";
 import { attemptId, planBaseline, planStyleBranches } from "./matrix.js";
 import { saveState } from "./state.js";
 import { sumTurnsCost, wouldExceedBudget } from "./cost.js";
+import { randomUUID } from "crypto";
+import { buildRunFileContent, writeRunFile } from "./runfile.js";
 
 const MAX_TOKENS_PER_TURN = 2048;
 
@@ -22,7 +24,20 @@ async function runAttempt(attempt, { scenario, maxTurns, state, log }) {
   if (attempt.status === "done" || attempt.status === "skipped") return;
 
   const systemPrompt = buildPlannerSystemPrompt(scenario, attempt.framing);
+  const planAcceptance = makePlanAcceptance(scenario);
   const goalText = scenario.goal[attempt.framing];
+
+  // Every attempt gets its own file in runs/, in the exact shape the
+  // manual dashboard already knows how to browse and continue — assigned
+  // once, on first touch, and rewritten after every turn (including
+  // whatever turns it was seeded with from a shared baseline), so it's
+  // immediately loadable in the UI even while the batch is still running.
+  if (!attempt.runId) {
+    attempt.runId = randomUUID();
+  }
+  const persistRunFile = () =>
+    writeRunFile(attempt.runId, buildRunFileContent({ batchId: state.batch_id, scenario, attempt }));
+  await persistRunFile();
 
   const onTurn = async ({ turns, messages }) => {
     attempt.turns = turns;
@@ -31,16 +46,13 @@ async function runAttempt(attempt, { scenario, maxTurns, state, log }) {
     const delta = newCost - attempt.cost;
     attempt.cost = newCost;
 
-    if (wouldExceedBudget(state, delta)) {
-      state.cumulative_cost += delta;
-      saveState(state);
-      throw new BudgetExceededError(
-        `Budget cap ($${state.budget_cap}) reached during attempt ${attempt.id}`
-      );
-    }
+    const exceeded = wouldExceedBudget(state, delta);
     state.cumulative_cost += delta;
-    saveState(state);
+    await persistRunFile();
+    await saveState(state);
 
+    // Log this turn regardless of outcome — it happened and was paid for,
+    // even if it's the one that trips the budget cap.
     const last = turns[turns.length - 1];
     const executorTurns = turns.filter((t) => t.role === "executor").length;
     const detail =
@@ -49,10 +61,16 @@ async function runAttempt(attempt, { scenario, maxTurns, state, log }) {
       `[${attempt.model}][${attempt.scenario_id}][${attempt.framing}][${attempt.style || "baseline"}] ` +
         `turn ${executorTurns}/${maxTurns} ${last.role} ${detail} — $${state.cumulative_cost.toFixed(4)} cumulative`
     );
+
+    if (exceeded) {
+      throw new BudgetExceededError(
+        `Budget cap ($${state.budget_cap}) reached during attempt ${attempt.id}`
+      );
+    }
   };
 
   attempt.status = "running";
-  saveState(state);
+  await saveState(state);
 
   try {
     let result;
@@ -104,7 +122,8 @@ async function runAttempt(attempt, { scenario, maxTurns, state, log }) {
     attempt.status = "error";
     attempt.error = err.message || String(err);
   }
-  saveState(state);
+  await persistRunFile();
+  await saveState(state);
 }
 
 async function runFraming({ state, model, scenarioId, scenario, framing, maxTurns, log }) {

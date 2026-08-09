@@ -70,7 +70,7 @@ function confirm(question) {
 }
 
 async function runReport(batchId) {
-  const state = loadState(batchId);
+  const state = await loadState(batchId);
   if (!state) throw new Error(`No batch found with id "${batchId}" under runs/batches/`);
   printSummaryTable(state);
   const csvPath = writeSummaryCsv(state);
@@ -83,6 +83,15 @@ async function main() {
   // would silently use the wrong key if the shell's differs from
   // .env.local's. Parse .env.local ourselves and force its values in.
   loadEnvLocalOverriding(".env.local");
+
+  if (!process.env.RUN_AUTHOR_EMAIL) {
+    console.error(
+      "RUN_AUTHOR_EMAIL must be set (the email to attribute these runs to). " +
+        "Add it to .env.local or export it before running this script."
+    );
+    process.exit(1);
+  }
+
   const args = parseArgs(process.argv.slice(2));
 
   if (args.report) {
@@ -128,8 +137,8 @@ async function main() {
     }
   }
 
-  const state = resolveState({ batchId, models, scenarioIds, maxTurns, budgetCap: args.budget });
-  saveState(state);
+  const state = await resolveState({ batchId, models, scenarioIds, maxTurns, budgetCap: args.budget });
+  await saveState(state);
 
   const scenarios = Object.fromEntries(scenarioIds.map((id) => [id, loadScenario(id)]));
 
