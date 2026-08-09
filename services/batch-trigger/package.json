@@ -1,0 +1,12 @@
+{
+  "name": "cop-batch-trigger",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.14.0"
+  }
+}
