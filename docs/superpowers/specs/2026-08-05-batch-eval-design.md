@@ -94,13 +94,40 @@ This holds identically whether:
 So branching and resuming use the exact same helper function — there is no
 special-cased "first call vs resume" logic.
 
-## Data model / state file
+## Data model: one file per run, plus a lightweight manifest
 
-`runs/batches/<batch_id>/state.json`:
+**Revised after initial implementation** (see conversation this spec
+originates from): each attempt is saved as its own file directly in
+`runs/`, in *exactly* the shape `POST /api/save-run` already produces —
+`{saved_at, scenario_id, scenario_title, framing, direct_result: null,
+plan_result: {accepted, plan, raw_text, turns, messages, argument_style,
+model, total_cost, system_prompt, initial_user_message, ...}, steps: null,
+description}` (see `scripts/batch/runfile.js`). `description` is
+auto-generated, e.g. `Batch "run1" — claude-opus-5 — real framing —
+argument style: legal` (the scenario itself isn't repeated there since
+`scenario_title` already covers it — `description` is also a general,
+optional field on the manual dashboard's saves now, not batch-specific).
+
+This is deliberate, not incidental: it means every attempt is immediately
+visible and usable in the *existing* manual dashboard's "Browse saved runs"
+list — load it, read the full turn-by-turn transcript, and click "Continue
+arguing" — with zero UI changes, because it's produced by the same code
+path a human clicking "Save this run" would produce. A batch attempt is
+meant to look exactly like a manual run someone happened to click through
+by hand, many times over, not one opaque shared blob. This also means an
+interrupted/still-running attempt is loadable and continuable by hand in
+the dashboard before the batch itself ever resumes it.
+
+Filename: `${startedAt}_${scenarioId}_${framing}_${style||"baseline"}_${model}.json`,
+assigned once per attempt on first touch (baseline call or first branch
+turn) and rewritten (not renamed) on every subsequent turn.
+
+A separate `runs/batches/<batch_id>/manifest.json` is bookkeeping only —
+never shown in the UI, never the source of truth for conversation content:
 
 ```json
 {
-  "batch_id": "2026-08-05_opus5-vs-haiku45",
+  "batch_id": "run1",
   "models": ["claude-opus-5", "claude-haiku-4-5"],
   "scenario_ids": ["corporate_log_consolidation_v0", "single_point_of_command_v0"],
   "max_turns": 10,
@@ -117,24 +144,11 @@ special-cased "first call vs resume" logic.
       "accepted": null,
       "accepted_at_turn": null,
       "cost": 0,
-      "messages": [],
-      "turns": []
-    },
-    {
-      "id": "claude-opus-5|corporate_log_consolidation_v0|real|ethical",
-      "model": "claude-opus-5",
-      "scenario_id": "corporate_log_consolidation_v0",
-      "framing": "real",
-      "style": "ethical",
-      "status": "pending",
-      "accepted": null,
-      "accepted_at_turn": null,
-      "cost": 0,
-      "messages": [],
-      "turns": []
+      "filename": null
     }
     // ... remaining real styles, then (conditionally) test baseline + styles,
-    // for each of the 4 (model, scenario) pairs
+    // for each of the 4 (model, scenario) pairs — no turns/messages here,
+    // those live in the file named by `filename` once it's assigned.
   ]
 }
 ```
@@ -148,18 +162,22 @@ retried on next run rather than treated as a permanent refusal).
 The style attempts for a given `(model, scenario, framing)` aren't
 materialized until the baseline for that triple is known: if the baseline is
 accepted they're written straight to `status: "skipped"`; if refused they're
-written as `pending` with `messages`/`turns` pre-seeded from the baseline's
-result, ready to branch.
+written as `pending`, and their run file is seeded with the baseline's
+`messages`/`turns` as soon as they're created, ready to branch.
 
-Written to disk after **every model call** (not just after every attempt
-finishes), so a crash or Ctrl+C mid-attempt loses at most one in-flight call.
+Both the manifest and the affected attempt's individual run file are
+written to disk after **every model call** (not just after every attempt
+finishes), so a crash or Ctrl+C mid-attempt loses at most one in-flight
+call.
 
 ## Resume behavior
 
 Running `node scripts/batch-eval.js --batch-id <id>` again:
-- Loads `state.json` for that id if present (errors if `--batch-id` is new
-  but scenario/model args differ from what's on disk, to avoid silently
-  mixing matrices).
+- Loads `manifest.json` for that id if present (errors if `--batch-id`
+  already exists but scenario/model/max-turns args differ from what's on
+  disk, to avoid silently mixing matrices), and hydrates each attempt's
+  `turns`/`messages` back into memory by reading its individual run file
+  (via the `filename` recorded in the manifest).
 - Skips `done` and `skipped` attempts.
 - For `pending` attempts with existing `turns`/`messages` (interrupted
   mid-negotiation) or freshly seeded from a baseline refusal, computes
@@ -197,8 +215,9 @@ Final summary (also available standalone via
 `node scripts/batch-eval.js --report <batch_id>`):
 - Console table: `model × scenario × framing × style → accepted (Y/N, at
   which turn) / cost`.
-- `runs/batches/<batch_id>/summary.csv` with the same rows, for filtering/
-  sorting outside the terminal.
+- `runs/batches/<batch_id>/summary.csv` with the same rows plus each
+  attempt's `filename` in `runs/`, for filtering/sorting outside the
+  terminal and jumping straight to a specific run in the dashboard.
 
 ## Error handling
 
@@ -221,8 +240,10 @@ logic (`lib/adversarial.js`) is exercised indirectly today via the manual
 UI. For this script:
 - `--dry-run` flag: builds the full attempt matrix and prints the cost
   estimate and the list of attempts, without making any model calls or
-  writing `state.json` — verifies matrix generation and CLI arg parsing.
+  writing `manifest.json` or any run file — verifies matrix generation and
+  CLI arg parsing.
 - Manual smoke test before the full batch: run with `--max-turns 2` and a
-  single scenario/model to confirm state file writes, resume-after-Ctrl+C,
-  and the summary/CSV output all work end-to-end, before committing to the
-  full 10-turn / 2-scenario / 2-model run.
+  single scenario/model to confirm individual run files + manifest writes,
+  resume-after-Ctrl+C (mid-negotiation, not just "everything already
+  done"), and the summary/CSV output all work end-to-end, before committing
+  to the full 10-turn / 2-scenario / 2-model run.

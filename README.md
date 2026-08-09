@@ -71,6 +71,11 @@ Open http://localhost:3000
 - The frontend resolves `<step_N.field>` placeholders in a step's arguments
   against the actual (stubbed) output of step N before sending the request,
   so later steps get concrete values.
+- Saved runs (`runs/*.json`, written by "Save this run") can carry an
+  optional free-text `description`, shown under each entry in "Browse saved
+  runs" — the scenario itself isn't repeated there since `scenario_title`
+  already covers that. The batch runner (below) fills this in automatically
+  for every run it produces.
 - All three endpoints share `lib/adversarial.js`'s negotiation loop: if the
   model refuses, an "adversary" (played by the same model, instructed to
   argue using exactly one rhetorical angle from `ARGUMENT_STYLES`) pushes
@@ -107,20 +112,49 @@ one to resume), `--models m1,m2`, `--scenarios s1,s2`, `--max-turns <n>`
 (default 10), `--budget <dollars>` (stops cleanly once cumulative cost would
 exceed it), `--yes` (skip the pre-flight confirmation prompt), `--dry-run`.
 
-Interrupting a run (Ctrl+C, a crash, or hitting `--budget`) is safe: state
-is written to `runs/batches/<batch_id>/state.json` after every single model
-call, not just after each attempt. Re-running with the same `--batch-id`
-resumes exactly where it left off — completed attempts are skipped,
-interrupted ones continue from their last saved turn, and API errors (as
-opposed to refusals) are retried rather than treated as permanent.
+Every `(model, scenario, framing, style)` combination is saved as its own
+file directly in `runs/` — in exactly the format `POST /api/save-run`
+produces, with an auto-generated `description` (e.g. `Batch "run1" —
+claude-opus-5 — real framing — argument style: legal`). That means each one
+shows up on its own in the manual dashboard's **"Browse saved runs"** list,
+can be loaded and inspected there, and — since it includes the full
+`messages`/`turns` history — **"Continue arguing" works on it immediately**,
+even while the batch is still running elsewhere. It's meant to look exactly
+like a manual run someone happened to click through by hand, many times
+over, not one big opaque blob.
+
+A separate, small `runs/batches/<batch_id>/manifest.json` tracks which
+attempts exist, their status, and which file in `runs/` holds each one —
+that's bookkeeping only, not shown in the UI, used purely so the batch
+script knows what's left to do on resume. It's written after every single
+model call, so interrupting a run (Ctrl+C, a crash, or hitting `--budget`)
+is safe: re-running with the same `--batch-id` resumes exactly where it
+left off — completed attempts are skipped, interrupted ones continue from
+their last saved turn (read back from their individual file), and API
+errors (as opposed to refusals) are retried rather than treated as
+permanent.
 
 Output: a console table plus `runs/batches/<batch_id>/summary.csv` with one
 row per `(model, scenario, framing, style)` — accepted or not, at which
-turn, and cost.
+turn, cost, and the exact filename in `runs/` to open it in the dashboard.
 
 Design notes (turn-budget math, state file schema, cost estimation
 approach) are in
 `docs/superpowers/specs/2026-08-05-batch-eval-design.md`.
+
+## Providers & models
+
+`lib/models.js`'s `MODEL_CATALOG` is the full list of callable models
+(Anthropic, OpenAI, xAI, Google) with pricing — it's what both the manual
+dashboard's model dropdown and `/compare`'s "hide models with no data"
+toggle read from. Run `node scripts/smoke-test-providers.js` to verify every
+model in it still actually works (one cheap text call + one tool-calling
+call each, against whichever `*_API_KEY` are set in `.env.local`).
+
+Not every model a provider offers makes it into the catalog — some are
+listed by the provider's own API but don't actually work through this
+integration. See `docs/MODEL_STATUS.md` for the current record of what's
+been tried and excluded, and why.
 
 ## Adding a scenario
 
