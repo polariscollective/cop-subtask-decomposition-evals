@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listScenarios, validateScenarioDoc } from "../../../lib/scenarios";
-import { auth } from "../../../auth";
+import { getSessionEmail } from "../../../auth";
 import { getSupabaseClient } from "../../../lib/supabase.js";
 
 export async function GET() {
@@ -8,8 +8,7 @@ export async function GET() {
 }
 
 export async function POST(req) {
-  const session = await auth();
-  const userEmail = session?.user?.email;
+  const userEmail = await getSessionEmail();
   if (!userEmail) {
     return NextResponse.json({ error: "not signed in" }, { status: 401 });
   }
