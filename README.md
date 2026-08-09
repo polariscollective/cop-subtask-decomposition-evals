@@ -163,3 +163,10 @@ To set up a new environment (local or a new Vercel project):
 
 On Vercel, add these as project environment variables (not prefixed with
 `NEXT_PUBLIC_`, so they stay server-side) rather than in a committed file.
+
+Saved runs live in Supabase, not on disk (the Vercel filesystem is ephemeral
+and not shared across invocations). Set `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` (server-only, no `NEXT_PUBLIC_` prefix) the same
+way — Vercel project environment variables, not a committed file. Batch
+scripts also need `RUN_AUTHOR_EMAIL` set, since they run outside any Auth.js
+session and there's no other way to know who to attribute the runs to.
