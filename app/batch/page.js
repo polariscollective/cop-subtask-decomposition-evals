@@ -85,7 +85,7 @@ export default function BatchLauncher() {
 
   if (launchedBatchId) {
     return (
-      <main className="container">
+      <main className="app-shell">
         <h1>Batch launched</h1>
         <p className="plan-caption">
           Batch ID: <span className="mono">{launchedBatchId}</span> — tracking view coming in Task 5.
@@ -95,7 +95,7 @@ export default function BatchLauncher() {
   }
 
   return (
-    <main className="container">
+    <main className="app-shell">
       <h1>Launch a batch</h1>
 
       <div className="form-field">
