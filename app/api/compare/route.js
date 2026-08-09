@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "../../../lib/supabase.js";
+import { isAllowedEmail } from "../../../lib/allowed-email.js";
+import { aggregateSamples } from "../../../lib/compare-aggregate.js";
 
 // GET() here takes no request-dependent input (no searchParams/cookies/
 // headers), so without this Next.js treats it as static and caches the
@@ -19,7 +21,8 @@ function execTurns(turns) {
 // combo's headline numbers are the *best* sample (deepest reached), with
 // the full sample list carried along so a caller can show every attempt,
 // not just the best one, and compute a reproducibility rate.
-function toSample(id, content, attemptStatus) {
+function toSample(row, attemptStatus) {
+  const { id, data: content, user_email: userEmail, batch_id: batchId } = row;
   const base = {
     id,
     pipeline: content.run_kind,
@@ -29,6 +32,8 @@ function toSample(id, content, attemptStatus) {
     style: content.style,
     saved_at: content.saved_at,
     inProgress: attemptStatus(content.batch_id, id) === "running",
+    user_email: userEmail,
+    batch_id: batchId,
   };
 
   if (content.run_kind === "linear") {
@@ -63,10 +68,12 @@ function toSample(id, content, attemptStatus) {
 
 export async function GET() {
   const supabase = getSupabaseClient();
-  const { data: rows, error } = await supabase.from("runs").select("id, data, batch_id");
+  const { data: rows, error } = await supabase.from("runs").select("id, data, batch_id, user_email");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const relevant = (rows || []).filter((r) => r.data?.run_kind === "linear" || r.data?.run_kind === "chained");
+  const relevant = (rows || []).filter(
+    (r) => (r.data?.run_kind === "linear" || r.data?.run_kind === "chained") && isAllowedEmail(r.user_email)
+  );
 
   // A run's batch (the `batches` row for its batch_id) tracks each
   // attempt's live status ("pending" | "running" | "done" | "error") while
@@ -87,7 +94,7 @@ export async function GET() {
     return attempt?.status ?? null;
   }
 
-  const samples = relevant.map((r) => toSample(r.id, r.data, attemptStatus));
+  const samples = relevant.map((r) => toSample(r, attemptStatus));
 
   const byCombo = new Map();
   for (const s of samples) {
@@ -96,29 +103,7 @@ export async function GET() {
     byCombo.get(key).push(s);
   }
 
-  const combos = [...byCombo.values()].map((group) => {
-    group.sort((a, b) => (a.saved_at || "").localeCompare(b.saved_at || ""));
-    const best = group.reduce((a, b) => (b.depth > a.depth ? b : a));
-    const completedCount = group.filter((s) => s.completed).length;
-    return {
-      pipeline: best.pipeline,
-      model: best.model,
-      scenario: best.scenario,
-      scenario_title: best.scenario_title,
-      style: best.style,
-      depth: best.depth,
-      fullSteps: best.fullSteps,
-      completed: best.completed,
-      planAccepted: best.planAccepted,
-      planFraming: best.planFraming,
-      turnsUsed: best.turnsUsed,
-      id: best.id,
-      sampleCount: group.length,
-      completedCount,
-      anyRunning: group.some((s) => s.inProgress),
-      samples: group,
-    };
-  });
+  const combos = [...byCombo.values()].map((group) => aggregateSamples(group)).filter(Boolean);
 
   return NextResponse.json(combos);
 }
