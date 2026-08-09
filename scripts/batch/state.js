@@ -36,7 +36,13 @@ export async function saveState(state) {
 export async function loadState(batchId) {
   const supabase = getSupabaseClient();
   const { data: row, error } = await supabase.from("batches").select("data").eq("id", batchId).single();
-  if (error || !row) return null;
+  // PGRST116 = no row matched .single() — a legitimate "batch doesn't exist
+  // yet" case. Any other error (network, auth, permissions) must not be
+  // read as "no existing batch": resolveState() would silently start a
+  // fresh batch and re-run everything from scratch instead of surfacing
+  // the failure, double-spending on a transient blip.
+  if (error && error.code !== "PGRST116") throw new Error(`Failed to load batch ${batchId}: ${error.message}`);
+  if (!row) return null;
   const manifest = row.data;
   manifest.attempts = await Promise.all(
     manifest.attempts.map(async (a) => {
