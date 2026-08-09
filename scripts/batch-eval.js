@@ -100,7 +100,7 @@ async function main() {
   }
 
   const models = args.models || DEFAULT_MODELS;
-  const scenarioIds = args.scenarios || listScenarios().map((s) => s.scenario_id);
+  const scenarioIds = args.scenarios || (await listScenarios()).map((s) => s.scenario_id);
   const maxTurns = args.maxTurns || DEFAULT_MAX_TURNS;
   const batchId =
     args.batchId || `batch_${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -140,7 +140,9 @@ async function main() {
   const state = await resolveState({ batchId, models, scenarioIds, maxTurns, budgetCap: args.budget });
   await saveState(state);
 
-  const scenarios = Object.fromEntries(scenarioIds.map((id) => [id, loadScenario(id)]));
+  const scenarios = Object.fromEntries(
+    await Promise.all(scenarioIds.map(async (id) => [id, await loadScenario(id)]))
+  );
 
   await runBatch({ state, scenarios });
 

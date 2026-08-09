@@ -8,7 +8,7 @@ export async function GET(req) {
     return NextResponse.json({ error: "missing scenarioId" }, { status: 400 });
   }
   try {
-    const scenario = loadScenario(scenarioId);
+    const scenario = await loadScenario(scenarioId);
     return NextResponse.json(scenario);
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 404 });

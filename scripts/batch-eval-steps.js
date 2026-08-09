@@ -149,7 +149,9 @@ async function main() {
   await saveState(state);
 
   const scenarioIds = [...new Set(sourcePlans.map((p) => p.scenarioId))];
-  const scenarios = Object.fromEntries(scenarioIds.map((id) => [id, loadScenario(id)]));
+  const scenarios = Object.fromEntries(
+    await Promise.all(scenarioIds.map(async (id) => [id, await loadScenario(id)]))
+  );
 
   await runStepsBatch({ batchId, state, sourcePlans, scenarios });
 
