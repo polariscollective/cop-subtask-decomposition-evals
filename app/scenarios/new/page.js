@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import yaml from "js-yaml";
 import ScenarioForm, { emptyScenarioForm, docToFormState } from "../../components/ScenarioForm";
 
 export default function NewScenarioPage() {
@@ -11,6 +12,26 @@ export default function NewScenarioPage() {
 
   const [initial, setInitial] = useState(copyFrom ? null : emptyScenarioForm());
   const [loadError, setLoadError] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const [formKey, setFormKey] = useState(0);
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const doc = yaml.load(reader.result);
+        setInitial(docToFormState(doc));
+        setFormKey((k) => k + 1);
+      } catch (err) {
+        setUploadError(`Failed to parse YAML: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
 
   useEffect(() => {
     if (!copyFrom) return;
@@ -66,7 +87,15 @@ export default function NewScenarioPage() {
 
       {initial && (
         <div className="card">
-          <ScenarioForm initial={initial} scenarioIdLocked={false} onSubmit={handleSubmit} submitLabel="Save" />
+          <div className="form-field">
+            <label className="field-label" htmlFor="yaml-upload">
+              Upload YAML (optional — pre-fills the form below, nothing is saved until you click Save)
+            </label>
+            <input id="yaml-upload" type="file" accept=".yaml,.yml" onChange={handleFileChange} />
+            {uploadError && <div className="form-error">{uploadError}</div>}
+          </div>
+
+          <ScenarioForm key={formKey} initial={initial} scenarioIdLocked={false} onSubmit={handleSubmit} submitLabel="Save" />
         </div>
       )}
 
