@@ -25,10 +25,6 @@ function emptyTool() {
   };
 }
 
-function emptyMetric() {
-  return { name: "", type: "" };
-}
-
 export function emptyScenarioForm() {
   return {
     scenario_id: "",
@@ -39,7 +35,6 @@ export function emptyScenarioForm() {
     goalTest: "",
     critical_tool: "",
     tools: [emptyTool()],
-    metrics: [emptyMetric()],
   };
 }
 
@@ -82,13 +77,6 @@ export function docToFormState(doc) {
             output: fieldsToRows(t.output),
           }))
         : [emptyTool()],
-    metrics:
-      doc.metrics && doc.metrics.length
-        ? doc.metrics.map((m) => {
-            const [name, type] = Object.entries(m)[0] || ["", ""];
-            return { name, type };
-          })
-        : [emptyMetric()],
   };
 }
 
@@ -125,9 +113,6 @@ export function formStateToDoc(form) {
         input: rowsToFields(t.input),
         output: rowsToFields(t.output),
       })),
-    metrics: form.metrics
-      .filter((m) => m.name.trim())
-      .map((m) => ({ [m.name.trim()]: m.type.trim() })),
   };
 }
 
@@ -215,7 +200,6 @@ const TOP_LEVEL_FIELDS = new Set([
   "goal.test",
   "critical_tool",
   "tools",
-  "metrics",
 ]);
 
 // Create, Edit, and Copy all render this same form — the only difference is
@@ -237,15 +221,6 @@ export default function ScenarioForm({ initial, scenarioIdLocked, onSubmit, subm
   }
   function addTool() {
     setForm((f) => ({ ...f, tools: [...f.tools, emptyTool()] }));
-  }
-  function updateMetric(i, patch) {
-    setForm((f) => ({ ...f, metrics: f.metrics.map((m, idx) => (idx === i ? { ...m, ...patch } : m)) }));
-  }
-  function removeMetric(i) {
-    setForm((f) => ({ ...f, metrics: f.metrics.length > 1 ? f.metrics.filter((_, idx) => idx !== i) : [emptyMetric()] }));
-  }
-  function addMetric() {
-    setForm((f) => ({ ...f, metrics: [...f.metrics, emptyMetric()] }));
   }
 
   async function handleSubmit(e) {
@@ -403,30 +378,6 @@ export default function ScenarioForm({ initial, scenarioIdLocked, onSubmit, subm
             ))}
         </select>
         {fieldError(errors, "critical_tool") && <div className="form-error">{fieldError(errors, "critical_tool")}</div>}
-      </div>
-
-      <div className="form-field">
-        <label className="field-label">metrics</label>
-        {fieldError(errors, "metrics") && <div className="form-error">{fieldError(errors, "metrics")}</div>}
-        <div className="kv-list">
-          {form.metrics.map((m, i) => (
-            <div key={i} className="kv-row">
-              <input type="text" placeholder="metric name" value={m.name} onChange={(e) => updateMetric(i, { name: e.target.value })} />
-              <input
-                type="text"
-                placeholder="type (e.g. bool, int|null)"
-                value={m.type}
-                onChange={(e) => updateMetric(i, { type: e.target.value })}
-              />
-              <button type="button" className="btn btn-ghost" onClick={() => removeMetric(i)}>
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-        <button type="button" className="btn btn-ghost add-btn" onClick={addMetric}>
-          + Add metric
-        </button>
       </div>
 
       <div className="action-row">
