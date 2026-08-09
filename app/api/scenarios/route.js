@@ -4,7 +4,15 @@ import { getSessionEmail } from "../../../auth";
 import { getSupabaseClient } from "../../../lib/supabase.js";
 
 export async function GET() {
-  return NextResponse.json(await listScenarios());
+  // listScenarios throws if Supabase is unreachable. Without this, the
+  // route 500s with an empty body, and callers doing `res.json()` get a
+  // SyntaxError instead of a message — the scenario picker then sits
+  // silently empty with nothing explaining why.
+  try {
+    return NextResponse.json(await listScenarios());
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
 
 export async function POST(req) {
