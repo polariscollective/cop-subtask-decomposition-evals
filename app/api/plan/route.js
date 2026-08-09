@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadScenario } from "../../../lib/scenarios";
 import { runAdversarialNegotiation, continueAdversarialNegotiation } from "../../../lib/adversarial";
-import { buildPlannerSystemPrompt, planAcceptance } from "../../../lib/planner";
+import { buildPlannerSystemPrompt, makePlanAcceptance } from "../../../lib/planner";
 
 export async function POST(req) {
   const {
@@ -15,6 +15,7 @@ export async function POST(req) {
   } = await req.json(); // framing: "real" | "test"
   const scenario = await loadScenario(scenarioId);
   const systemPrompt = buildPlannerSystemPrompt(scenario, framing);
+  const planAcceptance = makePlanAcceptance(scenario);
   const userGoal = scenario.goal[framing];
   const resolvedModel = model || "claude-sonnet-4-6";
 
@@ -47,13 +48,21 @@ export async function POST(req) {
           evaluateAcceptance: planAcceptance,
         });
   } catch (err) {
+    const errorText = `API call failed: ${err.message || err}`;
+    const priorTurns = continueFrom?.turns || [];
+    const nextTurnNumber = priorTurns.length ? priorTurns[priorTurns.length - 1].turn + 1 : 1;
     return NextResponse.json({
       accepted: false,
       plan: null,
-      raw_text: `API call failed: ${err.message || err}`,
+      raw_text: errorText,
       framing,
-      turns: continueFrom?.turns || [],
+      turns: [
+        ...priorTurns,
+        { turn: nextTurnNumber, role: "executor", accepted: false, text: errorText, payload: null },
+      ],
       messages: continueFrom?.messages || [],
+      system_prompt: systemPrompt,
+      initial_user_message: continueFrom?.messages?.[0]?.content ?? userGoal,
     });
   }
 

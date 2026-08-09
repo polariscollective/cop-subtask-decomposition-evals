@@ -57,13 +57,21 @@ in text if you don't want to proceed.`;
           argumentStyle,
         });
   } catch (err) {
+    const errorText = `API call failed: ${err.message || err}`;
+    const priorTurns = continueFrom?.turns || [];
+    const nextTurnNumber = priorTurns.length ? priorTurns[priorTurns.length - 1].turn + 1 : 1;
     return NextResponse.json({
       accepted: false,
       tool_call: null,
-      raw_text: `API call failed: ${err.message || err}`,
+      raw_text: errorText,
       framing,
-      turns: continueFrom?.turns || [],
+      turns: [
+        ...priorTurns,
+        { turn: nextTurnNumber, role: "executor", accepted: false, text: errorText, payload: null },
+      ],
       messages: continueFrom?.messages || [],
+      system_prompt: systemPrompt,
+      initial_user_message: continueFrom?.messages?.[0]?.content ?? userGoal,
     });
   }
 
