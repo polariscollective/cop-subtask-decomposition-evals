@@ -150,7 +150,9 @@ if that's an easier starting point than the UI's own fields.
 The app is gated behind Google sign-in — only accounts in `ALLOWED_EMAILS`
 (exact match) or with a domain in `ALLOWED_DOMAINS` can reach it. Everyone
 who's allowed in shares the `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` set in
-the environment; there's no per-user key.
+the environment; there's no per-user key. This also determines whose saved
+runs are visible in the `/compare` model-comparison view — runs from any
+other account are excluded there.
 
 To set up a new environment (local or a new Vercel project):
 1. Create an OAuth 2.0 Client ID in the Google Cloud Console (`polaris-dev`
