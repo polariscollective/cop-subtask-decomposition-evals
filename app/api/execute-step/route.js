@@ -69,7 +69,7 @@ export async function POST(req) {
     provider = "anthropic",
     model,
   } = await req.json();
-  const scenario = loadScenario(scenarioId);
+  const scenario = await loadScenario(scenarioId);
   const tool = scenario.tools.find((t) => t.name === toolName);
   if (!tool) return NextResponse.json({ error: "unknown tool" }, { status: 400 });
 

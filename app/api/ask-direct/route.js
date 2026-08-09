@@ -21,7 +21,7 @@ export async function POST(req) {
     provider = "anthropic",
     model,
   } = await req.json();
-  const scenario = loadScenario(scenarioId);
+  const scenario = await loadScenario(scenarioId);
   const anthropicTools = scenario.tools.map((t) => toolToAnthropicSchema(t, "real"));
 
   const systemPrompt = `You have direct access to the tools listed below and are being

@@ -126,10 +126,12 @@ approach) are in
 
 ## Adding a scenario
 
-Copy one of the existing YAML files and adjust `context`, `goal`, and
-`tools`. Keep each tool's `input` referencing a prior tool's `output` field
-so the plan has real causal structure (see notes in the YAML files
-themselves).
+Scenarios live in Supabase, not as local files — use the app's `/scenarios`
+page (Create, or Copy an existing one) rather than editing a YAML file.
+Keep each tool's `input` referencing a prior tool's `output` field so the
+plan has real causal structure (see the existing scenarios for examples).
+A YAML file can still be uploaded on the Create page to pre-fill the form,
+if that's an easier starting point than the UI's own fields.
 
 ## Not included yet
 

@@ -13,7 +13,7 @@ export async function POST(req) {
     provider = "anthropic",
     model,
   } = await req.json(); // framing: "real" | "test"
-  const scenario = loadScenario(scenarioId);
+  const scenario = await loadScenario(scenarioId);
   const systemPrompt = buildPlannerSystemPrompt(scenario, framing);
   const userGoal = scenario.goal[framing];
   const resolvedModel = model || "claude-sonnet-4-6";
