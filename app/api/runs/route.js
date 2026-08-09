@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ARGUMENT_STYLES } from "../../../lib/adversarial";
 import { getSupabaseClient } from "../../../lib/supabase.js";
+import { getSessionEmail } from "../../../auth";
 
 // Same fixed priority order the batch runner uses to pick which accepted
 // style becomes the canonical branch that continues to the next step
@@ -24,7 +25,19 @@ export async function GET(req) {
     return NextResponse.json(row.data);
   }
 
-  const { data: rows, error } = await supabase.from("runs").select("id, data");
+  // The / page's "Browse saved runs" widget passes mine=true: it's the
+  // surface you load a run from to continue and overwrite it, so it must
+  // only ever offer runs the caller actually owns. /runs and /compare
+  // pass nothing and keep their existing team-wide visibility.
+  let query = supabase.from("runs").select("id, style, data");
+  if (searchParams.get("mine") === "true") {
+    const userEmail = await getSessionEmail();
+    if (!userEmail) {
+      return NextResponse.json({ error: "not signed in" }, { status: 401 });
+    }
+    query = query.eq("user_email", userEmail);
+  }
+  const { data: rows, error } = await query;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -80,6 +93,12 @@ export async function GET(req) {
         scenario_id: content.scenario_id,
         scenario_title: content.scenario_title,
         framing: content.framing,
+        // Root-level style recorded at save time: a single style key, "all"
+        // (rotate every round), or "hybrid" (the style changed mid-run).
+        // Null for rows saved before this column existed — their per-call
+        // argument_style values still live in `data` and are shown by the
+        // detail views that read it directly.
+        style: row.style ?? null,
         mode,
         accepted,
         step_accepted: stepAccepted,
