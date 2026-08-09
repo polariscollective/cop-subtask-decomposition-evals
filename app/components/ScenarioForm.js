@@ -2,11 +2,17 @@
 
 import { useState } from "react";
 
-const IO_TYPES = ["string", "boolean", "integer", "array"];
+// A nested sub-field (inside an "array of object" output) may only be a
+// scalar — lib/scenarios.js's validator requires every value in a nested
+// object template to be a plain type string, so offering "array" or another
+// level of nesting there would let the form build docs that can never pass
+// validation.
+const SCALAR_TYPES = ["string", "boolean", "integer"];
+const IO_TYPES = [...SCALAR_TYPES, "array"];
 const OUTPUT_TYPES = [...IO_TYPES, "array of object"];
 
 function emptyRow() {
-  return { key: "", type: "string", nested: null };
+  return { key: "", type: "string", itemType: "string", nested: null };
 }
 
 function emptyTool() {
@@ -42,12 +48,16 @@ function fieldsToRows(io) {
   if (entries.length === 0) return [emptyRow()];
   return entries.map(([key, val]) => {
     if (Array.isArray(val) && val.length === 1 && typeof val[0] === "object" && val[0] !== null) {
-      return { key, type: "array of object", nested: fieldsToRows(val[0]) };
+      return { key, type: "array of object", itemType: "string", nested: fieldsToRows(val[0]) };
     }
     if (Array.isArray(val)) {
-      return { key, type: "array", nested: null };
+      // Carry the declared item type through, rather than defaulting every
+      // array to string — otherwise opening an existing ["integer"] field in
+      // the form and saving it would silently rewrite it as ["string"].
+      const itemType = SCALAR_TYPES.includes(val[0]) ? val[0] : "string";
+      return { key, type: "array", itemType, nested: null };
     }
-    return { key, type: val, nested: null };
+    return { key, type: val, itemType: "string", nested: null };
   });
 }
 
@@ -89,7 +99,7 @@ function rowsToFields(rows) {
     if (row.type === "array of object") {
       out[row.key] = [rowsToFields(row.nested || [])];
     } else if (row.type === "array") {
-      out[row.key] = ["string"];
+      out[row.key] = [row.itemType || "string"];
     } else {
       out[row.key] = row.type;
     }
@@ -125,7 +135,7 @@ function fieldError(errors, field) {
   return errors.find((e) => e.field === field)?.message || null;
 }
 
-function KeyTypeList({ rows, onChange, allowNested }) {
+function KeyTypeList({ rows, onChange, typeOptions }) {
   function updateRow(i, patch) {
     onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
@@ -135,7 +145,6 @@ function KeyTypeList({ rows, onChange, allowNested }) {
   function addRow() {
     onChange([...rows, emptyRow()]);
   }
-  const typeOptions = allowNested ? OUTPUT_TYPES : IO_TYPES;
 
   return (
     <div className="kv-list">
@@ -163,6 +172,19 @@ function KeyTypeList({ rows, onChange, allowNested }) {
                 </option>
               ))}
             </select>
+            {row.type === "array" && (
+              <select
+                aria-label="array item type"
+                value={row.itemType || "string"}
+                onChange={(e) => updateRow(i, { itemType: e.target.value })}
+              >
+                {SCALAR_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    of {t}
+                  </option>
+                ))}
+              </select>
+            )}
             <button type="button" className="btn btn-ghost" onClick={() => removeRow(i)}>
               Remove
             </button>
@@ -172,7 +194,7 @@ function KeyTypeList({ rows, onChange, allowNested }) {
               <KeyTypeList
                 rows={row.nested || [emptyRow()]}
                 onChange={(next) => updateRow(i, { nested: next })}
-                allowNested={false}
+                typeOptions={SCALAR_TYPES}
               />
             </div>
           )}
@@ -341,11 +363,11 @@ export default function ScenarioForm({ initial, scenarioIdLocked, onSubmit, subm
             <div className="tool-io">
               <div>
                 <div className="io-label">input</div>
-                <KeyTypeList rows={tool.input} onChange={(next) => updateTool(i, { input: next })} allowNested={false} />
+                <KeyTypeList rows={tool.input} onChange={(next) => updateTool(i, { input: next })} typeOptions={IO_TYPES} />
               </div>
               <div>
                 <div className="io-label">output</div>
-                <KeyTypeList rows={tool.output} onChange={(next) => updateTool(i, { output: next })} allowNested={true} />
+                <KeyTypeList rows={tool.output} onChange={(next) => updateTool(i, { output: next })} typeOptions={OUTPUT_TYPES} />
               </div>
             </div>
           </div>
