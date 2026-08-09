@@ -94,6 +94,30 @@ export default function Home() {
   const [description, setDescription] = useState("");
   const [directDescription, setDirectDescription] = useState("");
 
+  // Identity of the run currently being iterated on, per flow. Null means
+  // "not saved yet / fresh" — the next save inserts. Non-null means the
+  // next save overwrites that row. Reset only by a fresh "Ask...", never
+  // by a "Continue"; adopted wholesale when loading an existing run.
+  const [planRunId, setPlanRunId] = useState(null);
+  const [directRunId, setDirectRunId] = useState(null);
+  // Every distinct argument style used since this run began. More than one
+  // means the user changed the selector mid-run, which saves as "hybrid".
+  // Note "all" is a single legitimate value (rotate every round), not hybrid.
+  const [planStylesUsed, setPlanStylesUsed] = useState([]);
+  const [directStylesUsed, setDirectStylesUsed] = useState([]);
+
+  // Appends a style to a used-styles list without duplicating it.
+  function addStyle(setter) {
+    setter((prev) => (prev.includes(argumentStyle) ? prev : [...prev, argumentStyle]));
+  }
+
+  // What to store in the row's root-level style column: the single style if
+  // only one was ever used, "hybrid" if the user switched mid-run.
+  function styleForSave(stylesUsed) {
+    if (stylesUsed.length === 0) return null;
+    return stylesUsed.length > 1 ? "hybrid" : stylesUsed[0];
+  }
+
   useEffect(() => {
     fetch("/api/scenarios")
       .then((r) => r.json())
@@ -140,7 +164,7 @@ export default function Home() {
       return;
     }
     setLoadingRunsList(true);
-    const res = await fetch("/api/runs");
+    const res = await fetch("/api/runs?mine=true");
     const data = await res.json();
     setRunsList(data);
     setLoadingRunsList(false);
@@ -160,6 +184,15 @@ export default function Home() {
     setSaveDirectMessage(null);
     setDescription(data.description || "");
     setDirectDescription(data.description || "");
+    // Adopt this run's identity so continuing it and re-saving overwrites
+    // it rather than branching. A saved row is a plan run or a direct run,
+    // never both, so only the matching flow's id is set.
+    setPlanRunId(data.plan_result ? id : null);
+    setDirectRunId(data.direct_result ? id : null);
+    const loadedStyleUsed = data.plan_result?.argument_style || data.direct_result?.argument_style || null;
+    const seededStyles = loadedStyleUsed ? [loadedStyleUsed] : [];
+    setPlanStylesUsed(data.plan_result ? seededStyles : []);
+    setDirectStylesUsed(data.direct_result ? seededStyles : []);
     const loadedProvider = data.direct_result?.provider || data.plan_result?.provider;
     const loadedModel = data.direct_result?.model || data.plan_result?.model;
     const loadedStyle = data.direct_result?.argument_style || data.plan_result?.argument_style;
@@ -174,6 +207,9 @@ export default function Home() {
     setAskingDirect(true);
     setDirectResult(null);
     setSaveDirectMessage(null);
+    // A fresh ask is a new run — next save inserts a new row.
+    setDirectRunId(null);
+    setDirectStylesUsed([argumentStyle]);
     const res = await fetch("/api/ask-direct", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -186,6 +222,7 @@ export default function Home() {
 
   async function continueDirect() {
     if (!directResult?.messages) return;
+    addStyle(setDirectStylesUsed);
     setAskingDirect(true);
     const res = await fetch("/api/ask-direct", {
       method: "POST",
@@ -210,6 +247,9 @@ export default function Home() {
     setPlanResult(null);
     setSteps([]);
     setSaveMessage(null);
+    // A fresh ask is a new run — next save inserts a new row.
+    setPlanRunId(null);
+    setPlanStylesUsed([argumentStyle]);
     const res = await fetch("/api/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -222,6 +262,7 @@ export default function Home() {
 
   async function continuePlan() {
     if (!planResult?.messages) return;
+    addStyle(setPlanStylesUsed);
     setPlanning(true);
     const res = await fetch("/api/plan", {
       method: "POST",
@@ -249,10 +290,26 @@ export default function Home() {
     const res = await fetch("/api/save-run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenarioId, scenarioTitle, framing, planResult, steps, description }),
+      body: JSON.stringify({
+        scenarioId,
+        scenarioTitle,
+        framing,
+        planResult,
+        steps,
+        description,
+        runId: planRunId,
+        style: styleForSave(planStylesUsed),
+      }),
     });
     const data = await res.json();
-    setSaveMessage(data.saved ? `Saved (id ${data.id})` : `Save failed: ${data.error}`);
+    if (data.saved) {
+      // Hold onto the id so a second save — with or without a continue in
+      // between — updates this same row instead of stacking duplicates.
+      setPlanRunId(data.id);
+      setSaveMessage(`Saved (id ${data.id})`);
+    } else {
+      setSaveMessage(`Save failed: ${data.error}`);
+    }
     setSaving(false);
   }
 
@@ -263,15 +320,29 @@ export default function Home() {
     const res = await fetch("/api/save-run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenarioId, scenarioTitle, framing, directResult, description: directDescription }),
+      body: JSON.stringify({
+        scenarioId,
+        scenarioTitle,
+        framing,
+        directResult,
+        description: directDescription,
+        runId: directRunId,
+        style: styleForSave(directStylesUsed),
+      }),
     });
     const data = await res.json();
-    setSaveDirectMessage(data.saved ? `Saved (id ${data.id})` : `Save failed: ${data.error}`);
+    if (data.saved) {
+      setDirectRunId(data.id);
+      setSaveDirectMessage(`Saved (id ${data.id})`);
+    } else {
+      setSaveDirectMessage(`Save failed: ${data.error}`);
+    }
     setSavingDirect(false);
   }
 
   async function runNextStep() {
     if (!planResult?.plan) return;
+    addStyle(setPlanStylesUsed);
     const nextIndex = steps.length;
     if (nextIndex >= planResult.plan.length) return;
     const stepSpec = planResult.plan[nextIndex];
@@ -309,6 +380,7 @@ export default function Home() {
     if (idx < 0) return;
     const s = steps[idx];
     if (!s.messages) return;
+    addStyle(setPlanStylesUsed);
     const stepSpec = planResult.plan[idx];
 
     setExecuting(true);
@@ -338,6 +410,7 @@ export default function Home() {
   async function retryLastStep() {
     const idx = steps.length - 1;
     if (idx < 0) return;
+    addStyle(setPlanStylesUsed);
     const stepSpec = planResult.plan[idx];
 
     const priorOutputs = {};
@@ -417,7 +490,7 @@ export default function Home() {
                       {r.id}
                     </div>
                     <div className="plan-caption" style={{ margin: "2px 0 0" }}>
-                      {r.scenario_title} — {r.framing} — {r.mode}
+                      {r.scenario_title} — {r.framing} — {r.style || "—"} — {r.mode}
                       {" — "}
                       <span className={`badge ${resultBadge(r).className}`}>{resultBadge(r).label}</span>
                     </div>
