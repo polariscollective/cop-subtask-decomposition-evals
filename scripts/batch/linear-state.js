@@ -27,7 +27,10 @@ export async function loadState(batchId) {
   manifest.attempts = await Promise.all(
     manifest.attempts.map(async (a) => {
       if (!a.runId) return { ...a, planResult: null, steps: [] };
-      const { data: runRow } = await supabase.from("runs").select("data").eq("id", a.runId).single();
+      const { data: runRow, error: runError } = await supabase.from("runs").select("data").eq("id", a.runId).single();
+      if (runError && runError.code !== "PGRST116") {
+        throw new Error(`Failed to load run ${a.runId} for batch ${batchId}: ${runError.message}`);
+      }
       if (!runRow) return { ...a, planResult: null, steps: [] };
       return { ...a, planResult: runRow.data.plan_result, steps: runRow.data.steps || [] };
     })
