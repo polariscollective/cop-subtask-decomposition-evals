@@ -3,7 +3,7 @@ name: Deploy Batch Infra
 on:
   push:
     branches: [main]
-    paths: ["Dockerfile", "scripts/**", "lib/**", "scenarios/**", "services/batch-trigger/**"]
+    paths: ["Dockerfile", "scripts/**", "lib/**", "services/batch-trigger/**"]
 
 env:
   REGION: europe-west1
