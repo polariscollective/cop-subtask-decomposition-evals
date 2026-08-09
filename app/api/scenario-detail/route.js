@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { validateScenarioDoc } from "../../../lib/scenarios";
+import { normalizeScenarioDoc, validateScenarioDoc } from "../../../lib/scenarios";
 import { getSessionEmail } from "../../../auth";
 import { getSupabaseClient } from "../../../lib/supabase.js";
 
@@ -30,7 +30,7 @@ async function requireOwnedScenario(scenarioId) {
   const supabase = getSupabaseClient();
   const { data: existing, error } = await supabase
     .from("scenarios")
-    .select("created_by")
+    .select("created_by, deleted_at")
     .eq("scenario_id", scenarioId)
     .single();
   if (error || !existing) {
@@ -38,6 +38,12 @@ async function requireOwnedScenario(scenarioId) {
   }
   if (existing.created_by !== userEmail) {
     return { error: NextResponse.json({ error: "only the creator can modify this scenario" }, { status: 403 }) };
+  }
+  // A deleted scenario is still readable (old runs reference it) but is no
+  // longer a live thing to change — editing or re-deleting one is always a
+  // mistake, and there is no undelete for it to be half of.
+  if (existing.deleted_at) {
+    return { error: NextResponse.json({ error: "this scenario is deleted" }, { status: 409 }) };
   }
   return { supabase };
 }
@@ -52,18 +58,24 @@ export async function PUT(req) {
   const { supabase, error: authError } = await requireOwnedScenario(scenarioId);
   if (authError) return authError;
 
-  const body = await req.json();
-  const doc = { ...body, scenario_id: scenarioId }; // scenario_id is immutable
-  const { ok, errors } = validateScenarioDoc(doc);
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, errors: [{ field: "root", message: "body must be JSON" }] }, { status: 400 });
+  }
+  const submitted = { ...body, scenario_id: scenarioId }; // scenario_id is immutable
+  const { ok, errors } = validateScenarioDoc(submitted);
   if (!ok) {
     return NextResponse.json({ ok: false, errors }, { status: 400 });
   }
+  const doc = normalizeScenarioDoc(submitted);
 
   const { error: updateError } = await supabase
     .from("scenarios")
     .update({
       title: doc.title,
-      dilemma_id: doc.dilemma_id || null,
+      dilemma_id: doc.dilemma_id,
       updated_at: new Date().toISOString(),
       data: doc,
     })

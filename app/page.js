@@ -401,6 +401,9 @@ export default function Home() {
           <a className="btn btn-ghost" href="/batch">
             Launch a batch ↗
           </a>
+          <a className="btn btn-ghost" href="/scenarios">
+            Manage scenarios ↗
+          </a>
         </div>
         {runsListOpen &&
           (runsList.length === 0 ? (

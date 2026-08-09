@@ -253,9 +253,16 @@ export default function ScenarioForm({ initial, scenarioIdLocked, onSubmit, subm
     setSubmitting(true);
     setErrors([]);
     const doc = formStateToDoc(form);
-    const result = await onSubmit(doc);
-    setSubmitting(false);
-    if (!result.ok) setErrors(result.errors || [{ field: "root", message: result.error || "save failed" }]);
+    try {
+      const result = await onSubmit(doc);
+      if (!result.ok) setErrors(result.errors || [{ field: "root", message: result.error || "save failed" }]);
+    } catch (err) {
+      // Without this the button sits on "Saving…" forever after a network
+      // failure, with nothing said about why.
+      setErrors([{ field: "root", message: err.message || "save failed" }]);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (

@@ -34,14 +34,23 @@ export default function ScenariosList({ userEmail }) {
     }
     setDeleting(scenarioId);
     setDeleteError(null);
-    const res = await fetch(`/api/scenario-detail?scenarioId=${encodeURIComponent(scenarioId)}`, { method: "DELETE" });
-    const data = await res.json();
-    setDeleting(null);
-    if (!res.ok) {
-      setDeleteError(data.error || "delete failed");
-      return;
+    try {
+      const res = await fetch(`/api/scenario-detail?scenarioId=${encodeURIComponent(scenarioId)}`, {
+        method: "DELETE",
+      });
+      // A 500 can come back with an empty body, so parsing has to be
+      // allowed to fail without leaving the button stuck on "Deleting…".
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error || `delete failed (HTTP ${res.status})`);
+        return;
+      }
+      load();
+    } catch (e) {
+      setDeleteError(e.message);
+    } finally {
+      setDeleting(null);
     }
-    load();
   }
 
   return (

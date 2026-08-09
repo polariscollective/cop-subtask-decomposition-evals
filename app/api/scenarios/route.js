@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listScenarios, validateScenarioDoc } from "../../../lib/scenarios";
+import { listScenarios, normalizeScenarioDoc, validateScenarioDoc } from "../../../lib/scenarios";
 import { getSessionEmail } from "../../../auth";
 import { getSupabaseClient } from "../../../lib/supabase.js";
 
@@ -21,33 +21,36 @@ export async function POST(req) {
     return NextResponse.json({ error: "not signed in" }, { status: 401 });
   }
 
-  const doc = await req.json();
-  const { ok, errors } = validateScenarioDoc(doc);
+  let submitted;
+  try {
+    submitted = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, errors: [{ field: "root", message: "body must be JSON" }] }, { status: 400 });
+  }
+  const { ok, errors } = validateScenarioDoc(submitted);
   if (!ok) {
     return NextResponse.json({ ok: false, errors }, { status: 400 });
   }
+  const doc = normalizeScenarioDoc(submitted);
 
   const supabase = getSupabaseClient();
-  const { data: existing } = await supabase
-    .from("scenarios")
-    .select("scenario_id")
-    .eq("scenario_id", doc.scenario_id)
-    .maybeSingle();
-  if (existing) {
-    return NextResponse.json(
-      { ok: false, errors: [{ field: "scenario_id", message: `scenario_id "${doc.scenario_id}" already exists` }] },
-      { status: 400 }
-    );
-  }
-
   const { error } = await supabase.from("scenarios").insert({
     scenario_id: doc.scenario_id,
     title: doc.title,
-    dilemma_id: doc.dilemma_id || null,
+    dilemma_id: doc.dilemma_id,
     created_by: userEmail,
     data: doc,
   });
+  // Let the primary key decide uniqueness rather than checking first and
+  // inserting after — a check-then-insert loses the race between two
+  // concurrent creates and turns the second one into a raw 500.
   if (error) {
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { ok: false, errors: [{ field: "scenario_id", message: `scenario_id "${doc.scenario_id}" already exists` }] },
+        { status: 400 }
+      );
+    }
     return NextResponse.json({ ok: false, errors: [{ field: "root", message: error.message }] }, { status: 500 });
   }
 
