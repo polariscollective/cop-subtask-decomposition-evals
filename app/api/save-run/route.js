@@ -9,7 +9,7 @@ export async function POST(req) {
     return NextResponse.json({ error: "not signed in" }, { status: 401 });
   }
 
-  const { scenarioId, scenarioTitle, framing, directResult, planResult, steps, description } =
+  const { scenarioId, scenarioTitle, framing, directResult, planResult, steps, description, runId, style } =
     await req.json();
   if (!scenarioId || (!planResult && !directResult)) {
     return NextResponse.json(
@@ -35,12 +35,38 @@ export async function POST(req) {
   };
 
   const supabase = getSupabaseClient();
+
+  // Continuing a run and re-saving overwrites the row being iterated on
+  // rather than branching into a duplicate — a run is one linear thread,
+  // one row. The user_email guard is defense-in-depth: the only surface
+  // that hands out a runId to save against is GET /api/runs?mine=true,
+  // which already returns nothing but the caller's own runs.
+  if (runId) {
+    const { error: updateError } = await supabase
+      .from("runs")
+      .update({
+        scenario_id: scenarioId,
+        scenario_title: scenarioTitle || null,
+        framing,
+        style: style || null,
+        description: description || null,
+        data: run,
+      })
+      .eq("id", runId)
+      .eq("user_email", userEmail);
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+    return NextResponse.json({ saved: true, id: runId });
+  }
+
   const { error } = await supabase.from("runs").insert({
     id,
     user_email: userEmail,
     scenario_id: scenarioId,
     scenario_title: scenarioTitle || null,
     framing,
+    style: style || null,
     source_plan_id: null,
     batch_id: null,
     description: description || null,
