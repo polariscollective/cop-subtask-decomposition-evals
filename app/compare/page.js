@@ -414,7 +414,7 @@ export default function ComparePage() {
               <span className="cmp-running-mark">*</span> batch still running — may still progress further
             </div>
           )}
-          {tooltip.d?.filename && <div className="cmp-tt-row" style={{ marginTop: 4, opacity: 1 }}>Click to read the full transcript ▸</div>}
+          {tooltip.d?.id && <div className="cmp-tt-row" style={{ marginTop: 4, opacity: 1 }}>Click to read the full transcript ▸</div>}
         </div>
       )}
 
