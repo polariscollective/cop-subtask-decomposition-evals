@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { MODEL_CATALOG, defaultModelFor } from "../lib/models";
+import { resolveArgs } from "../lib/placeholders";
+import { PromptViewer, AdversaryTurn, TurnBody, turnsCost } from "./components/ConversationView";
 
 const ARGUMENT_STYLE_OPTIONS = [
   "all",
@@ -42,108 +44,18 @@ function SchemaTree({ schema, depth = 0 }) {
   );
 }
 
-// Toggle showing the exact system + user (or initial user) prompt that
-// produced a result, verbatim — so any claim about "what the model saw"
-// can be checked directly instead of inferred.
-function PromptViewer({ systemPrompt, userMessage, label = "View exact input prompt" }) {
-  const [open, setOpen] = useState(false);
-  if (!systemPrompt && !userMessage) return null;
-  return (
-    <>
-      <button className="btn btn-ghost" onClick={() => setOpen((v) => !v)} style={{ marginTop: 8 }}>
-        {open ? "Hide exact input prompt ▾" : `${label} ▸`}
-      </button>
-      {open && (
-        <div className="raw-block">
-          <div className="io-label">system prompt</div>
-          {systemPrompt || "(none)"}
-          <div className="io-label" style={{ marginTop: 12 }}>
-            {label.includes("adversary") ? "user prompt" : "initial user message"}
-          </div>
-          {userMessage || "(none)"}
-        </div>
-      )}
-    </>
-  );
-}
-
-function AdversaryTurn({ t }) {
-  return (
-    <div className="adversary-turn">
-      <div className="turn-label">
-        turn {t.turn} — adversary <span className="mono">({t.argument_style})</span>
-      </div>
-      <div>{t.text}</div>
-      {t.cost != null && <div className="turn-cost">${t.cost.toFixed(4)}</div>}
-      <PromptViewer
-        systemPrompt={t.system_prompt}
-        userMessage={t.user_prompt}
-        label="View adversary's prompt"
-      />
-    </div>
-  );
-}
-
-// Renders an executor's response, collapsed by default when the exchange
-// spanned more than one turn (only the final response is shown), with a
-// toggle to expand the full adversary/executor conversation exactly as it
-// happened.
-function TurnBody({ turns }) {
-  const [expanded, setExpanded] = useState(false);
-  const executorTurns = (turns || []).filter((t) => t.role === "executor");
-  const last = executorTurns[executorTurns.length - 1];
-
-  const renderPayload = (t) =>
-    t.payload?.tool && (
-      <div className="output-line mono">
-        called {t.payload.tool} — {JSON.stringify(t.payload.arguments)}
-      </div>
-    );
-
-  if (!turns || turns.length <= 1) {
-    return (
-      <>
-        <pre>{last?.text || "(tool call, no text)"}</pre>
-        {last && renderPayload(last)}
-      </>
-    );
+// Execution rows have three real outcomes, not two: the run reached the
+// plan's last step and it was accepted (completed), it was refused at
+// whichever step this row tested (stopped), or it succeeded at a step
+// that isn't the last one yet (in_progress) — that last case must never
+// render as "refused", it did get accepted, just not the final action.
+function resultBadge(r) {
+  if (r.mode !== "execution") {
+    return { className: r.accepted ? "badge-ok" : "badge-danger", label: r.accepted ? "accepted" : "refused" };
   }
-
-  return (
-    <>
-      <pre>{last?.text || "(tool call, no text)"}</pre>
-      {last && renderPayload(last)}
-      <button className="btn btn-ghost" onClick={() => setExpanded((v) => !v)} style={{ marginTop: 8 }}>
-        {expanded ? "Collapse conversation ▾" : `Show full conversation (${turns.length} turns) ▸`}
-      </button>
-      {expanded && (
-        <div className="turn-thread">
-          {turns.map((t, i) =>
-            t.role === "adversary" ? (
-              <AdversaryTurn key={i} t={t} />
-            ) : (
-              <div key={i} className={`log-entry ${t.accepted ? "ok" : "danger"}`}>
-                <div className="log-entry-head">
-                  <span className="log-entry-idx">turn {t.turn}</span>
-                  <span className={`badge ${t.accepted ? "badge-ok" : "badge-danger"}`}>
-                    {t.accepted ? "accepted" : "refused"}
-                  </span>
-                  {t.truncated && <span className="badge badge-warn">truncated</span>}
-                </div>
-                <pre>{t.text || "(tool call, no text)"}</pre>
-                {renderPayload(t)}
-                {t.cost != null && <div className="turn-cost">${t.cost.toFixed(4)}</div>}
-              </div>
-            )
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-function turnsCost(turns) {
-  return (turns || []).reduce((sum, t) => sum + (t.cost || 0), 0);
+  if (r.step_outcome === "completed") return { className: "badge-ok", label: `completed ${r.step_progress}` };
+  if (r.step_outcome === "in_progress") return { className: "badge-warn", label: `in progress ${r.step_progress}` };
+  return { className: "badge-danger", label: `refused ${r.step_progress}` };
 }
 
 export default function Home() {
@@ -179,6 +91,8 @@ export default function Home() {
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
+  const [description, setDescription] = useState("");
+  const [directDescription, setDirectDescription] = useState("");
 
   useEffect(() => {
     fetch("/api/scenarios")
@@ -193,6 +107,14 @@ export default function Home() {
     setScenarioDetailOpen(false);
     setScenarioDetail(null);
   }, [scenarioId]);
+
+  // Deep link from the runs explorer (/runs "Open" button): ?id=<uuid>
+  // loads that run on mount, same as clicking "Load" in the browser below.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (id) loadRun(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleProviderChange(p) {
     setProvider(p);
@@ -236,6 +158,8 @@ export default function Home() {
     setSteps(data.steps || []);
     setSaveMessage(null);
     setSaveDirectMessage(null);
+    setDescription(data.description || "");
+    setDirectDescription(data.description || "");
     const loadedProvider = data.direct_result?.provider || data.plan_result?.provider;
     const loadedModel = data.direct_result?.model || data.plan_result?.model;
     const loadedStyle = data.direct_result?.argument_style || data.plan_result?.argument_style;
@@ -325,7 +249,7 @@ export default function Home() {
     const res = await fetch("/api/save-run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenarioId, scenarioTitle, framing, planResult, steps }),
+      body: JSON.stringify({ scenarioId, scenarioTitle, framing, planResult, steps, description }),
     });
     const data = await res.json();
     setSaveMessage(data.saved ? `Saved (id ${data.id})` : `Save failed: ${data.error}`);
@@ -339,49 +263,11 @@ export default function Home() {
     const res = await fetch("/api/save-run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenarioId, scenarioTitle, framing, directResult }),
+      body: JSON.stringify({ scenarioId, scenarioTitle, framing, directResult, description: directDescription }),
     });
     const data = await res.json();
     setSaveDirectMessage(data.saved ? `Saved (id ${data.id})` : `Save failed: ${data.error}`);
     setSavingDirect(false);
-  }
-
-  function resolveScalar(val, priorOutputs) {
-    // "<step_N.field>" - a scalar output field from a prior step.
-    if (typeof val !== "string") return val;
-    let m = val.match(/^<step_(\d+)\.(\w+)>$/);
-    if (m) {
-      const stepOut = priorOutputs[parseInt(m[1], 10)];
-      return stepOut ? stepOut[m[2]] : val;
-    }
-    // "<step_N.arrayField[].subField>" - list of subField pulled across an
-    // array-valued prior output (e.g. system_ids from systems[].system_id).
-    m = val.match(/^<step_(\d+)\.(\w+)\[\]\.(\w+)>$/);
-    if (m) {
-      const stepOut = priorOutputs[parseInt(m[1], 10)];
-      const arr = stepOut ? stepOut[m[2]] : null;
-      if (Array.isArray(arr)) return arr.map((item) => (item ? item[m[3]] : undefined));
-      return val;
-    }
-    return val;
-  }
-
-  function resolveArgs(rawArgs, priorOutputs) {
-    // Resolve "<step_N.field>" placeholders against previously produced outputs.
-    // Array-typed arguments are resolved element-by-element, since placeholders
-    // there previously passed through unresolved.
-    const resolved = {};
-    for (const [key, val] of Object.entries(rawArgs)) {
-      if (Array.isArray(val)) {
-        resolved[key] = val.flatMap((item) => {
-          const r = resolveScalar(item, priorOutputs);
-          return Array.isArray(r) ? r : [r];
-        });
-      } else {
-        resolved[key] = resolveScalar(val, priorOutputs);
-      }
-    }
-    return resolved;
   }
 
   async function runNextStep() {
@@ -498,16 +384,24 @@ export default function Home() {
 
       <section className="card">
         <div className="card-title">Saved runs</div>
-        <button className="btn btn-ghost" onClick={toggleRunsList} disabled={loadingRunsList}>
-          {loadingRunsList
-            ? "Loading..."
-            : runsListOpen
-            ? "Hide saved runs ▾"
-            : "Browse saved runs ▸"}
-        </button>
-        <a className="btn btn-ghost" href="/batch">
-          Launch a batch ↗
-        </a>
+        <div className="action-row">
+          <button className="btn btn-ghost" onClick={toggleRunsList} disabled={loadingRunsList}>
+            {loadingRunsList
+              ? "Loading..."
+              : runsListOpen
+              ? "Hide saved runs ▾"
+              : "Browse saved runs ▸"}
+          </button>
+          <a className="btn btn-ghost" href="/runs">
+            Open full runs table ↗
+          </a>
+          <a className="btn btn-ghost" href="/compare">
+            Model comparison ↗
+          </a>
+          <a className="btn btn-ghost" href="/batch">
+            Launch a batch ↗
+          </a>
+        </div>
         {runsListOpen &&
           (runsList.length === 0 ? (
             <p className="plan-caption">No saved runs yet — save one below once you have a result.</p>
@@ -521,12 +415,14 @@ export default function Home() {
                     </div>
                     <div className="plan-caption" style={{ margin: "2px 0 0" }}>
                       {r.scenario_title} — {r.framing} — {r.mode}
-                      {r.mode === "plan" && ` — ${r.step_count} step(s) run`}
                       {" — "}
-                      <span className={`badge ${r.accepted ? "badge-ok" : "badge-danger"}`}>
-                        {r.accepted ? "accepted" : "refused"}
-                      </span>
+                      <span className={`badge ${resultBadge(r).className}`}>{resultBadge(r).label}</span>
                     </div>
+                    {r.description && (
+                      <div className="plan-caption" style={{ margin: "4px 0 0", fontStyle: "italic" }}>
+                        {r.description}
+                      </div>
+                    )}
                   </div>
                   <button className="btn" onClick={() => loadRun(r.id)} disabled={loadingRun}>
                     {loadingRun ? "Loading..." : "Load"}
@@ -738,6 +634,13 @@ export default function Home() {
           </span>
 
           <div className="save-row">
+            <input
+              type="text"
+              placeholder="Optional description (shown when browsing saved runs)"
+              value={directDescription}
+              onChange={(e) => setDirectDescription(e.target.value)}
+              style={{ flex: 1, minWidth: 220 }}
+            />
             <button className="btn" onClick={saveDirectRun} disabled={savingDirect}>
               {savingDirect ? "Saving..." : "Save this run"}
             </button>
@@ -754,7 +657,7 @@ export default function Home() {
           </div>
 
           <div className="action-row">
-            {!directResult.accepted && directResult.messages && (
+            {!directResult.accepted && directResult.turns?.some((t) => t.role === "executor") && (
               <button className="btn" onClick={continueDirect} disabled={askingDirect}>
                 {askingDirect
                   ? "Arguing..."
@@ -784,6 +687,13 @@ export default function Home() {
           </span>
 
           <div className="save-row">
+            <input
+              type="text"
+              placeholder="Optional description (shown when browsing saved runs)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              style={{ flex: 1, minWidth: 220 }}
+            />
             <button className="btn" onClick={saveRun} disabled={saving}>
               {saving ? "Saving..." : "Save this run"}
             </button>
@@ -819,7 +729,7 @@ export default function Home() {
           </div>
 
           <div className="action-row">
-            {!planResult.accepted && planResult.messages && (
+            {!planResult.accepted && planResult.turns?.some((t) => t.role === "executor") && (
               <button className="btn" onClick={continuePlan} disabled={planning}>
                 {planning ? "Arguing..." : `Continue arguing (+${Math.max(1, adversaryTurns)} more) ▸`}
               </button>
@@ -866,7 +776,7 @@ export default function Home() {
               {s.output && <div className="output-line">output: {JSON.stringify(s.output)}</div>}
               {i === steps.length - 1 && (
                 <div className="action-row" style={{ marginTop: 10 }}>
-                  {!s.accepted && s.messages && (
+                  {!s.accepted && s.turns?.some((t) => t.role === "executor") && (
                     <button className="btn" onClick={continueLastStep} disabled={executing}>
                       {executing
                         ? "Arguing..."
