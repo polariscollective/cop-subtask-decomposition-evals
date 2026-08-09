@@ -479,6 +479,17 @@ textarea {
 .form-field select {
   width: 100%;
 }
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+}
 .form-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;

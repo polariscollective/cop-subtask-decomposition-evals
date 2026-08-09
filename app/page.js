@@ -505,6 +505,9 @@ export default function Home() {
             ? "Hide saved runs ▾"
             : "Browse saved runs ▸"}
         </button>
+        <a className="btn btn-ghost" href="/batch">
+          Launch a batch ↗
+        </a>
         {runsListOpen &&
           (runsList.length === 0 ? (
             <p className="plan-caption">No saved runs yet — save one below once you have a result.</p>
