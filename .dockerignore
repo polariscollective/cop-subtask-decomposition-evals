@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env.local
+.env
+runs
+runs_backup_20260807_002806
+.superpowers
+docs
+app
+public
