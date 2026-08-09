@@ -21,13 +21,24 @@ export default function NewScenarioPage() {
     setUploadError(null);
     const reader = new FileReader();
     reader.onload = () => {
+      let doc;
       try {
-        const doc = yaml.load(reader.result);
-        setInitial(docToFormState(doc));
-        setFormKey((k) => k + 1);
+        doc = yaml.load(reader.result);
       } catch (err) {
         setUploadError(`Failed to parse YAML: ${err.message}`);
+        return;
       }
+      // Syntactically valid YAML can still be the wrong shape — an empty
+      // file, a bare scalar, or a top-level list. Without this guard,
+      // docToFormState either throws (reported as a bogus parse error) or,
+      // for a scalar, reads undefined off every field and silently wipes
+      // whatever the form already held.
+      if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+        setUploadError("That YAML isn't a scenario — expected a mapping of fields at the top level.");
+        return;
+      }
+      setInitial(docToFormState(doc));
+      setFormKey((k) => k + 1);
     };
     reader.readAsText(file);
     e.target.value = "";
