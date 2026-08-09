@@ -225,9 +225,9 @@ export default function Home() {
     setRunsListOpen(true);
   }
 
-  async function loadRun(filename) {
+  async function loadRun(id) {
     setLoadingRun(true);
-    const res = await fetch(`/api/runs?file=${encodeURIComponent(filename)}`);
+    const res = await fetch(`/api/runs?id=${encodeURIComponent(id)}`);
     const data = await res.json();
     setScenarioId(data.scenario_id);
     setFraming(data.framing);
@@ -328,7 +328,7 @@ export default function Home() {
       body: JSON.stringify({ scenarioId, scenarioTitle, framing, planResult, steps }),
     });
     const data = await res.json();
-    setSaveMessage(data.saved ? `Saved as runs/${data.filename}` : `Save failed: ${data.error}`);
+    setSaveMessage(data.saved ? `Saved (id ${data.id})` : `Save failed: ${data.error}`);
     setSaving(false);
   }
 
@@ -342,7 +342,7 @@ export default function Home() {
       body: JSON.stringify({ scenarioId, scenarioTitle, framing, directResult }),
     });
     const data = await res.json();
-    setSaveDirectMessage(data.saved ? `Saved as runs/${data.filename}` : `Save failed: ${data.error}`);
+    setSaveDirectMessage(data.saved ? `Saved (id ${data.id})` : `Save failed: ${data.error}`);
     setSavingDirect(false);
   }
 
@@ -511,10 +511,10 @@ export default function Home() {
           ) : (
             <div className="section-gap">
               {runsList.map((r) => (
-                <div key={r.filename} className="run-row">
+                <div key={r.id} className="run-row">
                   <div>
                     <div className="mono" style={{ fontSize: 12.5 }}>
-                      {r.filename}
+                      {r.id}
                     </div>
                     <div className="plan-caption" style={{ margin: "2px 0 0" }}>
                       {r.scenario_title} — {r.framing} — {r.mode}
@@ -525,7 +525,7 @@ export default function Home() {
                       </span>
                     </div>
                   </div>
-                  <button className="btn" onClick={() => loadRun(r.filename)} disabled={loadingRun}>
+                  <button className="btn" onClick={() => loadRun(r.id)} disabled={loadingRun}>
                     {loadingRun ? "Loading..." : "Load"}
                   </button>
                 </div>
