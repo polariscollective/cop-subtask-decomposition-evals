@@ -51,8 +51,6 @@ npm run dev
 
 Open http://localhost:3000
 
-- Scenarios live in `scenarios/*.yaml`. Add a new file there and it shows up
-  in the dropdown automatically.
 - `POST /api/plan`: asks the model to decompose the scenario's goal into a
   sequential tool-call plan, using either the "real" or "test" framing
   descriptions for each tool. Looks for a fenced ```json block in the
@@ -97,7 +95,7 @@ accepted, the whole thing repeats under the "test" framing.
 node scripts/batch-eval.js --dry-run
 
 # run it for real (defaults: claude-opus-5 + claude-haiku-4-5, all
-# scenarios in scenarios/, 10 turns per attempt)
+# all scenarios in Supabase, 10 turns per attempt)
 node scripts/batch-eval.js --batch-id my-run --budget 15
 
 # check progress / re-print the summary any time, including mid-run
