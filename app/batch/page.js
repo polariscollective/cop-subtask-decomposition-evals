@@ -11,6 +11,85 @@ function defaultBatchId(pipeline) {
   return `${pipeline}_${new Date().toISOString().replace(/[:.]/g, "-")}`;
 }
 
+const STATUS_BADGE = {
+  pending: { className: "badge-neutral", label: "pending" },
+  running: { className: "badge-warn", label: "running" },
+  done: { className: "badge-ok", label: "done" },
+  error: { className: "badge-danger", label: "error" },
+};
+
+function BatchTracker({ batchId }) {
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer;
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/batch/status?batchId=${encodeURIComponent(batchId)}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(data.error || `HTTP ${res.status}`);
+          return;
+        }
+        setStatus(data);
+        if (data.status === "running") {
+          timer = setTimeout(poll, 3000);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e.message);
+      }
+    }
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [batchId]);
+
+  if (error) return <p style={{ color: "var(--danger)" }}>Failed to load status: {error}</p>;
+  if (!status) return <p className="plan-caption">Loading…</p>;
+
+  return (
+    <div>
+      <p className="plan-caption">
+        Status: <span className={`badge ${STATUS_BADGE[status.status]?.className || "badge-neutral"}`}>{status.status}</span>
+        {" — "}cumulative cost: <span className="mono">${status.cumulativeCost.toFixed(4)}</span>
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Scenario</th>
+            <th>Style</th>
+            <th>Status</th>
+            <th>Accepted</th>
+            <th>Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          {status.attempts.map((a) => (
+            <tr key={a.id}>
+              <td className="mono">{a.model}</td>
+              <td>{a.scenario}</td>
+              <td>{a.style}</td>
+              <td>
+                <span className={`badge ${STATUS_BADGE[a.status]?.className || "badge-neutral"}`}>{a.status}</span>
+              </td>
+              <td>{a.accepted === null ? "—" : a.accepted ? "yes" : "no"}</td>
+              <td className="mono">${a.cost.toFixed(4)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function CheckboxGroup({ label, options, selected, onToggle, renderLabel }) {
   return (
     <div className="form-field">
@@ -88,8 +167,9 @@ export default function BatchLauncher() {
       <main className="app-shell">
         <h1>Batch launched</h1>
         <p className="plan-caption">
-          Batch ID: <span className="mono">{launchedBatchId}</span> — tracking view coming in Task 5.
+          Batch ID: <span className="mono">{launchedBatchId}</span>
         </p>
+        <BatchTracker batchId={launchedBatchId} />
       </main>
     );
   }
