@@ -91,14 +91,15 @@ export default auth((req) => {
   return NextResponse.redirect(signInUrl);
 });
 
-// Only static assets skip middleware now — the access decision lives in the
-// handler above, not in this pattern. Each exclusion is anchored: the two
-// directories with a trailing slash, favicon with an escaped dot and $.
-// Left unanchored (as they were), /favicon.icoX and /_next/staticfoo skip
-// the gate entirely, which is the same defect this file has already had
-// twice.
+// Four exclusions skip middleware entirely; everything else reaches the
+// handler above, which makes the access decision. Each is anchored with
+// (?:/|$), except favicon.ico$ which is a single file. api/auth is excluded
+// HERE rather than waved through by the handler: NextAuth resolves the
+// session before the callback body runs and appends any Set-Cookie to the
+// response, so merely running middleware on /api/auth/* races the route's
+// own cookie on the sign-in/sign-out path.
 export const config = {
-  matcher: ["/((?!_next/static/|_next/image/|favicon\\.ico$).*)"],
+  matcher: ["/((?!api/auth(?:/|$)|_next/static(?:/|$)|_next/image(?:/|$)|favicon\\.ico$).*)"],
 };
 ```
 
@@ -108,7 +109,7 @@ export const config = {
 
 ```bash
 node -e '
-const matcher = /^\/((?!_next\/static\/|_next\/image\/|favicon\.ico$).*)$/;
+const matcher = /^\/((?!api\/auth(?:\/|$)|_next\/static(?:\/|$)|_next\/image(?:\/|$)|favicon\.ico$).*)$/;
 const PUBLIC_PATHS = new Set(["/compare", "/api/compare", "/api/runs", "/api/scenario-detail"]);
 function isPublicPath(p) {
   const path = p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
@@ -125,14 +126,14 @@ const cases = {
   "/compare": "open", "/compare/": "open",
   "/api/compare": "open", "/api/runs": "open", "/api/runs/": "open",
   "/api/scenario-detail": "open",
-  "/api/auth": "open", "/api/auth/signin": "open", "/api/auth/callback/google": "open",
+  "/api/auth": "skipped", "/api/auth/signin": "skipped", "/api/auth/callback/google": "skipped",
   "/": "gated", "/runs": "gated", "/batch": "gated", "/scenarios": "gated",
   "/api/save-run": "gated", "/api/plan": "gated", "/api/scenarios": "gated",
   "/compare/sub": "gated", "/comparex": "gated", "/compare-internal": "gated",
   "/api/comparex": "gated", "/api/runsx": "gated", "/api/scenario-detailx": "gated",
   "/api/authx": "gated", "/xcompare": "gated", "/a/compare": "gated",
   "/favicon.icoX": "gated", "/_next/staticfoo": "gated", "/_next/imagex": "gated",
-  "/_next/static/chunk.js": "skipped", "/_next/image/x.png": "skipped", "/favicon.ico": "skipped",
+  "/_next/static/chunk.js": "skipped", "/_next/image": "skipped", "/favicon.ico": "skipped",
 };
 let bad = 0;
 for (const [p, want] of Object.entries(cases)) {
@@ -143,6 +144,8 @@ console.log(bad === 0 ? "OK (" + Object.keys(cases).length + " cases)" : bad + "
 ```
 
 Expected: `OK (31 cases)`
+
+(Task 1 shipped with one correction found in review: `api/auth(?:/|$)` was restored to the matcher, and `_next/static` / `_next/image` anchored with `(?:/|$)` rather than a bare trailing slash — `/_next/image` is the image optimizer's real pathname and never carries one. See commit 1a8d997.)
 
 Note `/compare/sub` is expected **gated** — exact matching deliberately does not extend to sub-paths, unlike the old `(?:/|$)` matcher. No such route exists.
 
@@ -311,7 +314,7 @@ Same script as Task 1 Step 2, with `PUBLIC_PATHS` updated and the expectations f
 
 ```bash
 node -e '
-const matcher = /^\/((?!_next\/static\/|_next\/image\/|favicon\.ico$).*)$/;
+const matcher = /^\/((?!api\/auth(?:\/|$)|_next\/static(?:\/|$)|_next\/image(?:\/|$)|favicon\.ico$).*)$/;
 const PUBLIC_PATHS = new Set(["/", "/api/compare", "/api/runs", "/api/scenario-detail"]);
 function isPublicPath(p) {
   const path = p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
@@ -325,13 +328,14 @@ const cases = {
   "/": "open",
   "/api/compare": "open", "/api/runs": "open", "/api/runs/": "open",
   "/api/scenario-detail": "open",
-  "/api/auth": "open", "/api/auth/signin": "open", "/api/auth/callback/google": "open",
+  "/api/auth": "skipped", "/api/auth/signin": "skipped", "/api/auth/callback/google": "skipped",
   "/compare": "gated", "/dashboard": "gated", "/runs": "gated", "/batch": "gated",
   "/scenarios": "gated", "/scenarios/new": "gated",
   "/api/save-run": "gated", "/api/plan": "gated", "/api/scenarios": "gated",
   "/comparex": "gated", "/dashboard-internal": "gated", "/api/runsx": "gated",
   "/api/authx": "gated", "/favicon.icoX": "gated", "/_next/staticfoo": "gated",
-  "/_next/static/chunk.js": "skipped", "/favicon.ico": "skipped",
+  "/_next/imagex": "gated",
+  "/_next/static/chunk.js": "skipped", "/favicon.ico": "skipped", "/_next/image": "skipped",
 };
 let bad = 0;
 for (const [p, want] of Object.entries(cases)) {
@@ -341,7 +345,7 @@ for (const [p, want] of Object.entries(cases)) {
 console.log(bad === 0 ? "OK (" + Object.keys(cases).length + " cases)" : bad + " mismatches");'
 ```
 
-Expected: `OK (25 cases)`
+Expected: `OK (27 cases)`
 
 `/compare` reads "gated" here and that is correct — the `next.config.mjs` redirect sends it to `/` before it ever needs to be public, and if middleware happens to run first, an anonymous visitor is redirected to `/` anyway. Same destination under either routing order.
 
