@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import RunTranscriptModal from "../components/RunTranscriptModal";
-import ScenarioDetailModal from "../components/ScenarioDetailModal";
+import RunTranscriptModal from "./RunTranscriptModal";
+import ScenarioDetailModal from "./ScenarioDetailModal";
 import { MODEL_CATALOG } from "../../lib/models";
 import { aggregateSamples } from "../../lib/compare-aggregate.js";
 
