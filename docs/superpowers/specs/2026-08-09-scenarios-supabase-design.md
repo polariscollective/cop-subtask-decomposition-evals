@@ -59,7 +59,7 @@ create table scenarios (
   deleted_at timestamptz,            -- soft delete: non-null = hidden from the picker/list
   data jsonb not null                -- full scenario doc, same shape as today's parsed YAML:
                                       -- { scenario_id, dilemma_id, title, context,
-                                      --   goal: {real, test}, critical_tool, tools: [...], metrics: [...] }
+                                      --   goal: {real, test}, critical_tool, tools: [...] }
 );
 create index scenarios_created_by_idx on scenarios (created_by);
 
@@ -103,9 +103,10 @@ Rules:
   existing scenarios' `output.systems[]`-style shapes). No deeper nesting is
   supported by the form or validated beyond that level.
 - `critical_tool` must equal the `name` of one of `tools`.
-- `metrics`: array of `{ name, type }` pairs, both non-empty strings (`type`
-  is free text, e.g. `"int|null"`, not constrained to an enum — it's
-  documentation, not a schema that drives behavior).
+  (A `metrics` field was specified here originally and then dropped before
+  this design shipped — nothing in the app ever read it, and the comparison
+  numbers come from run data, not from the scenario doc. Stored docs that
+  still carry the key are accepted; the write path strips it.)
 - `scenario_id` uniqueness is checked against the table (not part of
   `validateScenarioDoc` itself, since it needs a database round trip) by the
   `POST` route before insert.
@@ -157,7 +158,6 @@ exactly one place that renders/validates the scenario shape in the UI:
   for `input` and `output` (the `output` list's type dropdown includes
   "array of object", which reveals a nested repeatable key→type list for
   that field's sub-fields — one level, matching validation above).
-- `metrics`: repeatable `{ name, type }` rows.
 - **Save** calls `POST` (create/copy) or `PUT` (edit). Server-side errors
   (`errors[].field`) render inline next to the matching field/row.
 

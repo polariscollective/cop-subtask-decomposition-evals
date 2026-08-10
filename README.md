@@ -71,7 +71,8 @@ Open http://localhost:3000
 - The frontend resolves `<step_N.field>` placeholders in a step's arguments
   against the actual (stubbed) output of step N before sending the request,
   so later steps get concrete values.
-- Saved runs (`runs/*.json`, written by "Save this run") can carry an
+- Saved runs (rows in the Supabase `runs` table, written by "Save this run")
+  can carry an
   optional free-text `description`, shown under each entry in "Browse saved
   runs" — the scenario itself isn't repeated there since `scenario_title`
   already covers that. The batch runner (below) fills this in automatically
@@ -123,20 +124,21 @@ even while the batch is still running elsewhere. It's meant to look exactly
 like a manual run someone happened to click through by hand, many times
 over, not one big opaque blob.
 
-A separate, small `runs/batches/<batch_id>/manifest.json` tracks which
-attempts exist, their status, and which file in `runs/` holds each one —
-that's bookkeeping only, not shown in the UI, used purely so the batch
+A separate row in the Supabase `batches` table tracks which attempts exist,
+their status, and which `runs` row holds each one — that's bookkeeping only,
+not shown in the UI, used purely so the batch
 script knows what's left to do on resume. It's written after every single
 model call, so interrupting a run (Ctrl+C, a crash, or hitting `--budget`)
 is safe: re-running with the same `--batch-id` resumes exactly where it
 left off — completed attempts are skipped, interrupted ones continue from
-their last saved turn (read back from their individual file), and API
+their last saved turn (read back from their own `runs` row), and API
 errors (as opposed to refusals) are retried rather than treated as
 permanent.
 
-Output: a console table plus `runs/batches/<batch_id>/summary.csv` with one
-row per `(model, scenario, framing, style)` — accepted or not, at which
-turn, cost, and the exact filename in `runs/` to open it in the dashboard.
+Output: a console table plus `runs/batches/<batch_id>/summary.csv` — the one
+local file the batch runner still writes — with one row per
+`(model, scenario, framing, style)`: accepted or not, at which turn, cost,
+and the run's id, which opens it in the dashboard at `/?id=<id>`.
 
 Design notes (turn-budget math, state file schema, cost estimation
 approach) are in
