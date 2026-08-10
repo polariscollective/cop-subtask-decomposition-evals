@@ -32,6 +32,14 @@ const PUBLIC_PATHS = new Set(["/compare", "/api/compare", "/api/runs", "/api/sce
 // Auth.js's own endpoints are a genuine subtree (/api/auth/signin,
 // /api/auth/callback/google, …), so this one is a prefix test — with the
 // trailing slash, so /api/authx doesn't match it.
+//
+// The matcher below excludes api/auth too, so in the committed config this
+// branch is unreachable: every /api/auth/* request is already skipped
+// before it gets here. It stays anyway as the one deliberate redundancy in
+// this file. If the matcher's api/auth exclusion is ever narrowed or
+// dropped by a future edit, middleware would start running on Auth.js's
+// own endpoints again — and without this check, every one of them would
+// read as gated, locking every user out of signing in.
 function isPublicPath(pathname) {
   // Next.js normalises trailing slashes before middleware, but strip one
   // anyway so a direct request for /api/runs/ resolves like /api/runs. The
@@ -55,12 +63,29 @@ export default auth((req) => {
   return NextResponse.redirect(signInUrl);
 });
 
-// Only static assets skip middleware now — the access decision lives in the
-// handler above, not in this pattern. Each exclusion is anchored: the two
-// directories with a trailing slash, favicon with an escaped dot and $.
-// Left unanchored (as they were), /favicon.icoX and /_next/staticfoo skip
-// the gate entirely, which is the same defect this file has already had
-// twice.
+// Four exclusions skip middleware entirely; everything else reaches the
+// handler above, which makes the access decision. Each is anchored with
+// (?:/|$) — directory-or-exact-end — except favicon.ico$, which is a single
+// file so a literal $ is enough. Unanchored (as _next/static and
+// _next/image were before this fix), a bare prefix match lets a longer
+// sibling path ride along for free: /favicon.icoX, /_next/staticfoo and
+// bare /_next/image (Next's image optimizer's actual pathname — the
+// ?url=…&w=…&q=… it's always requested with is a query string, not part of
+// what the matcher sees) would all wrongly skip the gate. That is the same
+// defect this file has already had twice, so /api/authx, /_next/imagex and
+// /_next/staticfoo must all stay gated.
+//
+// api/auth is excluded here — at the matcher level — rather than left to
+// isPublicPath's handler-level check, so middleware never runs on Auth.js's
+// own endpoints at all, full stop. Running and then waving the request
+// through with NextResponse.next() is not equivalent: the auth() wrapper
+// this file exports resolves the session before the handler callback ever
+// executes, and appends any resulting Set-Cookie to the response regardless
+// of what the callback returns. On /api/auth/signout or
+// /api/auth/callback/*, that stray middleware-originated cookie would race
+// the Set-Cookie NextAuth's own handler sets for the same request — a
+// cookie race on the sign-in/sign-out critical path. Excluding api/auth in
+// the matcher is the only way to keep middleware from executing there.
 export const config = {
-  matcher: ["/((?!_next/static/|_next/image/|favicon\\.ico$).*)"],
+  matcher: ["/((?!api/auth(?:/|$)|_next/static(?:/|$)|_next/image(?:/|$)|favicon\\.ico$).*)"],
 };
