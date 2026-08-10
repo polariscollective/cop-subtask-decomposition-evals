@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { normalizeScenarioDoc, validateScenarioDoc } from "../../../lib/scenarios";
 import { getSessionEmail } from "../../../auth";
 import { getSupabaseClient } from "../../../lib/supabase.js";
+import { isAllowedEmail } from "../../../lib/allowed-email.js";
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
@@ -19,12 +20,18 @@ export async function GET(req) {
   // response doesn't distinguish "unpublished" from "does not exist".
   const userEmail = await getSessionEmail();
   if (!userEmail) {
-    const { count, error: countError } = await supabase
+    // Mirror /api/compare's gate exactly, not just "published": a published
+    // run from a non-allowlisted account (e.g. a QA account like
+    // reviewer-verify@example.com) never appears in the /compare grid, so it
+    // must not be able to unlock a scenario spec here either. Fails closed —
+    // a query error, no rows, or no allowlisted row all produce the same 404.
+    const { data: candidates, error: candidatesError } = await supabase
       .from("runs")
-      .select("id", { count: "exact", head: true })
+      .select("user_email")
       .eq("scenario_id", scenarioId)
       .eq("is_public", true);
-    if (countError || !count) {
+    const allowed = !candidatesError && (candidates || []).some((r) => isAllowedEmail(r.user_email));
+    if (!allowed) {
       return NextResponse.json({ error: `Scenario not found: ${scenarioId}` }, { status: 404 });
     }
   }
@@ -38,7 +45,15 @@ export async function GET(req) {
     return NextResponse.json({ error: `Scenario not found: ${scenarioId}` }, { status: 404 });
   }
 
-  return NextResponse.json({ ...row.data, created_by: row.created_by, deleted: row.deleted_at != null });
+  return NextResponse.json({
+    ...row.data,
+    // created_by is an account email, and this endpoint is anonymously
+    // readable for published scenarios — so it goes only to a caller that
+    // already has a session. The signed-in surfaces that use it
+    // (EditScenarioForm, ScenariosList) are unaffected.
+    ...(userEmail ? { created_by: row.created_by } : {}),
+    deleted: row.deleted_at != null,
+  });
 }
 
 async function requireOwnedScenario(scenarioId) {
