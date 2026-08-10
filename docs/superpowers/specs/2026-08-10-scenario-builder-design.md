@@ -253,6 +253,14 @@ candidate rather than fatal for the batch.
    across all four providers. `/api/generate-scenario` surfaces it as a
    distinct error message rather than letting it look like malformed YAML,
    so a user can tell "switch models" from "retry".
+2b. **Judge model** — a *second*, separate dropdown, defaulting to
+   `gpt-5.6-terra`. Deliberately a different family from the generator
+   default: one model grading its own output is a self-preference confound,
+   and a judge that flatters its own writing cannot rank candidates, which is
+   the entire point of the feature. Verified to return all five dimensions at
+   about $0.007. Not `gemini-pro-latest` — a reasoning model that spends the
+   judge route's 1500-token budget before emitting its JSON block, so every
+   grading returns "no fenced json block in the response".
 3. **Count** — number of candidates, default 3.
 4. **Generate** → N cards appear in a "generating…" state and fill in as
    their requests return, each triggering its own judge call on arrival.

@@ -1244,7 +1244,40 @@ const PROMOTED_SCENARIO_KEY = "generatedScenario";
 // claude-sonnet-5 and claude-opus-4-8 handle the same prompt fine. A default
 // that fails on every first use is not a default.
 const DEFAULT_MODEL = "claude-sonnet-5";
+
+// The judge defaults to a DIFFERENT model family from the generator, on
+// purpose. Letting one model grade its own output is a self-preference
+// confound this project can't afford to leave in: the whole feature exists to
+// rank candidates, and a judge that flatters its own writing ranks nothing.
+// gpt-5.6-terra was verified to return all five dimensions on a real candidate
+// at ~$0.007. Not gemini-pro-latest: it is a reasoning model and spends the
+// judge route's 1500-token budget before emitting its JSON block, so every
+// grading comes back "no fenced json block in the response".
+const DEFAULT_JUDGE_MODEL = "gpt-5.6-terra";
 const MAX_CANDIDATES = 5;
+
+// Two of these on the page — one for the generator, one for the judge — so the
+// provider-grouped option list is written once.
+function ModelSelect({ id, label, value, onChange }) {
+  return (
+    <div className="form-field">
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        {Object.entries(MODEL_CATALOG).map(([providerKey, p]) => (
+          <optgroup key={providerKey} label={p.label}>
+            {Object.entries(p.models).map(([modelId, m]) => (
+              <option key={modelId} value={modelId}>
+                {m.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 function ToolChain({ doc }) {
   return (
@@ -1294,6 +1327,7 @@ export default function GenerateScenarioPage() {
   const [seed, setSeed] = useState(SEED_PRESETS[0].text);
   const [presetId, setPresetId] = useState(SEED_PRESETS[0].id);
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const [judgeModel, setJudgeModel] = useState(DEFAULT_JUDGE_MODEL);
   const [count, setCount] = useState(3);
   const [candidates, setCandidates] = useState([]);
   const [running, setRunning] = useState(false);
@@ -1314,7 +1348,7 @@ export default function GenerateScenarioPage() {
       const res = await fetch("/api/judge-scenario", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ doc, model }),
+        body: JSON.stringify({ doc, model: judgeModel }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -1428,22 +1462,16 @@ export default function GenerateScenarioPage() {
         </div>
 
         <div className="form-grid-2">
-          <div className="form-field">
-            <label className="field-label" htmlFor="gen-model">
-              Model
-            </label>
-            <select id="gen-model" value={model} onChange={(e) => setModel(e.target.value)}>
-              {Object.entries(MODEL_CATALOG).map(([providerKey, p]) => (
-                <optgroup key={providerKey} label={p.label}>
-                  {Object.entries(p.models).map(([id, m]) => (
-                    <option key={id} value={id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
+          <ModelSelect id="gen-model" label="Generator model" value={model} onChange={setModel} />
+          <ModelSelect
+            id="judge-model"
+            label="Judge model — keep it different from the generator"
+            value={judgeModel}
+            onChange={setJudgeModel}
+          />
+        </div>
+
+        <div className="form-grid-2">
           <div className="form-field">
             <label className="field-label" htmlFor="gen-count">
               Candidates (1–{MAX_CANDIDATES})
@@ -1525,6 +1553,7 @@ With `env -u ANTHROPIC_API_KEY npm run dev -- -p 3100` running, open `http://loc
 Check, in order:
 1. The preset dropdown loads "Single point of command" and its seed fills the textarea.
 2. Switching preset replaces the seed text.
+2b. The generator model defaults to Claude Sonnet 5 and the judge model to GPT-5.6 Terra — two separate dropdowns, each listing every provider group. Changing one must not change the other.
 3. Clicking Generate with 3 candidates shows three cards in "Generating…" and they resolve **independently** — the second card must not wait for the third.
 4. Each card that resolves `ok` shows a title, a context, a tool chain with exactly one `⚠` entry, then five scores appearing a moment later.
 5. Expanding a score row shows its rationale.
