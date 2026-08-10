@@ -16,7 +16,7 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        {email && (
+        {email ? (
           <div className="auth-bar">
             <span>Signed in as {email}</span>
             {session?.user ? (
@@ -33,6 +33,16 @@ export default async function RootLayout({ children }) {
             ) : (
               <span className="badge badge-warn">local dev — sign-in bypassed</span>
             )}
+          </div>
+        ) : (
+          // Only ever reachable on /compare — every other route redirects to
+          // sign-in before this renders. It's the way back in for a team
+          // member who lands on the public view.
+          <div className="auth-bar">
+            <span>Viewing public results</span>
+            <a className="btn btn-ghost" href="/api/auth/signin">
+              Sign in
+            </a>
           </div>
         )}
         {children}

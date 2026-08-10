@@ -31,6 +31,14 @@ export default auth((req) => {
   return NextResponse.redirect(signInUrl);
 });
 
+// Everything is gated except: Auth.js's own endpoints, Next's static assets,
+// and the public compare view. That last group is /compare plus the three
+// endpoints it reads — each of which does its own session check and serves
+// nothing but published runs to an anonymous caller (see app/api/compare,
+// app/api/runs and app/api/scenario-detail). The (?:/|$) on each keeps the
+// carve-out from matching a longer sibling path like /compare-internal.
 export const config = {
-  matcher: ["/((?!api/auth(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!api/auth(?:/|$)|api/compare(?:/|$)|api/runs(?:/|$)|api/scenario-detail(?:/|$)|compare(?:/|$)|_next/static|_next/image|favicon.ico).*)",
+  ],
 };
