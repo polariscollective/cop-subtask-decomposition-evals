@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "batch-eval": "node scripts/batch-eval.js"
+    "batch-eval": "node scripts/batch-eval.js",
+    "test": "node --test 'tests/**/*.test.js'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
