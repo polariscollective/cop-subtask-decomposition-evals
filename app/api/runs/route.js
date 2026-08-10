@@ -18,12 +18,13 @@ export async function GET(req) {
   const supabase = getSupabaseClient();
 
   if (id) {
-    // Reading a run stays team-wide: /compare's transcript modal is the only
-    // way to read a run's conversation, and the runs explorer is deliberately
-    // shared. What must NOT be shared is loading a run into the editor to
-    // continue and overwrite it — so the payload reports whether the caller
-    // owns it, and the client refuses to adopt an identity it doesn't own.
-    // The real write-side guard is POST /api/save-run's own ownership check.
+    // Reading a run stays team-wide: the public root's transcript modal is
+    // the only way to read a run's conversation, and the runs explorer is
+    // deliberately shared. What must NOT be shared is loading a run into the
+    // editor to continue and overwrite it — so the payload reports whether
+    // the caller owns it, and the client refuses to adopt an identity it
+    // doesn't own. The real write-side guard is POST /api/save-run's own
+    // ownership check.
     const userEmail = await getSessionEmail();
     const { data: row, error } = await supabase
       .from("runs")
@@ -33,7 +34,7 @@ export async function GET(req) {
     if (error || !row) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
-    // Anonymous readers exist only because /compare is public. They may read
+    // Anonymous readers exist only because / is public. They may read
     // a transcript, but only of a published run — and an unpublished id gets
     // the same 404 as a missing one, so the response never confirms that an
     // id it was handed actually exists.
@@ -58,10 +59,10 @@ export async function GET(req) {
     });
   }
 
-  // The / page's "Browse saved runs" widget passes mine=true: it's the
-  // surface you load a run from to continue and overwrite it, so it must
-  // only ever offer runs the caller actually owns. /runs and /compare
-  // pass nothing and keep their existing team-wide visibility.
+  // The /dashboard page's "Browse saved runs" widget passes mine=true: it's
+  // the surface you load a run from to continue and overwrite it, so it must
+  // only ever offer runs the caller actually owns. /runs and / pass nothing
+  // and keep their existing team-wide visibility.
   let query = supabase.from("runs").select("id, style, data, user_email");
   // Resolved for every request, not just the scoped one: the team-wide list
   // still has to say which rows are the caller's, so /runs can offer "Open"

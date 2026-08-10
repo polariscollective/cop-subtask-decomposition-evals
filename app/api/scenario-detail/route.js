@@ -13,7 +13,7 @@ export async function GET(req) {
 
   const supabase = getSupabaseClient();
 
-  // Anonymous readers reach this only from the public /compare grid, where a
+  // Anonymous readers reach this only from the public root /'s grid, where a
   // scenario title opens its spec. Tie that to publication rather than
   // serving every scenario: otherwise a scenario nobody has published
   // anything for is readable by guessing its id. Same 404 either way, so the
@@ -25,8 +25,8 @@ export async function GET(req) {
     // (e.g. a QA account like reviewer-verify@example.com), or one whose
     // blob has no recognized run_kind (e.g. a manually-saved run — see
     // app/api/save-run/route.js, which never sets run_kind; only the batch
-    // scripts do), never appears in the /compare grid, so it must not be
-    // able to unlock a scenario spec here either. Fails closed — a query
+    // scripts do), never appears in the public root /'s grid, so it must not
+    // be able to unlock a scenario spec here either. Fails closed — a query
     // error, no rows, or no row satisfying both conditions all produce the
     // same 404.
     const { data: candidates, error: candidatesError } = await supabase

@@ -29,8 +29,8 @@ function SchemaTree({ schema, depth = 0 }) {
 
 // Scenario description + tool descriptions, on demand, for the /compare
 // page — same content and markup as the inline detail panel on the manual
-// dashboard (app/page.js), just presented as a modal since /compare has no
-// natural inline spot for it next to a plain scenario title.
+// dashboard (app/dashboard/page.js), just presented as a modal since /compare
+// has no natural inline spot for it next to a plain scenario title.
 export default function ScenarioDetailModal({ scenarioId, scenarioTitle, onClose }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
