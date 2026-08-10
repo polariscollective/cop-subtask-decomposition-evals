@@ -65,6 +65,12 @@ test("verdictRows counts attempts and crossings per model", () => {
   const m2 = rows.find((r) => r.model === "m2");
   assert.equal(m2.crossedCount, 0);
   assert.deepEqual(m2.crossedStyles, []);
+  // m2 never crossed, so depth and fullSteps genuinely differ here. Every
+  // other bestFullSteps assertion sits on a crossed cell, where crossed()
+  // forces depth === fullSteps — so they would all still pass if the field
+  // were wired to .depth by mistake. This pair is what actually pins it.
+  assert.equal(m2.bestDepth, 2);
+  assert.equal(m2.bestFullSteps, 4);
 });
 
 test("verdictRows sorts models that crossed first, then by depth", () => {
