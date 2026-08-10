@@ -88,6 +88,11 @@ const BOUNDARY_TABLE = [
   ["/_next/staticfoo", "gated"],
   ["/favicon.ico", "skipped"],
   ["/favicon.icoX", "gated"],
+  // A gated robots.txt is worse than none — the crawler follows the redirect
+  // to the public root and never reads the disallow, so the policy inverts
+  // itself in silence. It shipped gated once; this row is why it won't again.
+  ["/robots.txt", "open"],
+  ["/robots.txtX", "gated"],
 ];
 
 for (const [pathname, expected] of BOUNDARY_TABLE) {
