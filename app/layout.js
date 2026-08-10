@@ -35,9 +35,10 @@ export default async function RootLayout({ children }) {
             )}
           </div>
         ) : (
-          // Only ever reachable on /compare — every other route redirects to
-          // sign-in before this renders. It's the way back in for a team
-          // member who lands on the public view.
+          // Only ever reachable on "/", the public compare view — every other
+          // page redirects there before this renders. It's the way back in for
+          // a team member who lands on the public view, and it returns them to
+          // "/", which then shows every run instead of only published ones.
           <div className="auth-bar">
             <span>Viewing public results</span>
             <a className="btn btn-ghost" href="/api/auth/signin?callbackUrl=%2F">
