@@ -8,7 +8,7 @@ const COLUMNS = [
   { key: "scenario_title", label: "Scenario", width: 200 },
   { key: "model", label: "Model", width: 140 },
   { key: "framing", label: "Framing", width: 84 },
-  { key: "argument_style", label: "Style", width: 150 },
+  { key: "style", label: "Style", width: 150 },
   { key: "mode", label: "Mode", width: 90 },
   { key: "step_index", label: "Progress", width: 110, numeric: true },
   { key: "accepted", label: "Result", width: 140 },
@@ -256,7 +256,7 @@ export default function RunsExplorer() {
                       <td>{r.scenario_title || r.scenario_id}</td>
                       <td className="mono">{r.model || "—"}</td>
                       <td>{r.framing || "—"}</td>
-                      <td className="mono">{r.argument_style || "—"}</td>
+                      <td className="mono">{r.style || r.argument_style || "—"}</td>
                       <td>
                         <span className={`badge badge-neutral`}>{r.mode}</span>
                       </td>

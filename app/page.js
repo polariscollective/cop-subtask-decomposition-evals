@@ -116,9 +116,13 @@ export default function Home() {
   // transcripts could otherwise be destroyed silently.
   const [savedStepCount, setSavedStepCount] = useState(0);
 
-  // Appends a style to a used-styles list without duplicating it.
-  function addStyle(setter) {
-    setter((prev) => (prev.includes(argumentStyle) ? prev : [...prev, argumentStyle]));
+  // Appends a style to a used-styles list without duplicating it. Takes the
+  // value explicitly — call sites pass the style the RESPONSE reports, so a
+  // failed call (whose error branch omits argument_style) never contributes,
+  // and a call that ran zero adversary turns never counts toward "hybrid".
+  function addStyle(setter, styleValue) {
+    if (!styleValue) return;
+    setter((prev) => (prev.includes(styleValue) ? prev : [...prev, styleValue]));
   }
 
   // What to store in the row's root-level style column: the single style if
@@ -175,6 +179,15 @@ export default function Home() {
     setPlanStylesUsed([]);
     setDirectStylesUsed([]);
     setSavedStepCount(0);
+    // The results on screen belong to the previous scenario. Leaving them up
+    // means the next Save writes a row labelled with the NEW scenario but
+    // carrying the OLD scenario's transcript.
+    setPlanResult(null);
+    setDirectResult(null);
+    setSteps([]);
+    setSaveMessage(null);
+    setSaveDirectMessage(null);
+    setLoadError(null);
   }
 
   async function toggleScenarioDetail() {
@@ -196,10 +209,17 @@ export default function Home() {
       return;
     }
     setLoadingRunsList(true);
+    setLoadError(null);
     const res = await fetch("/api/runs?mine=true");
-    const data = await res.json();
-    setRunsList(data);
+    const data = await res.json().catch(() => ({}));
     setLoadingRunsList(false);
+    // Assigning a non-array here would make the list's .map() throw and take
+    // the whole page down.
+    if (!res.ok || !Array.isArray(data)) {
+      setLoadError(`Could not load your saved runs: ${data.error || `HTTP ${res.status}`}`);
+      return;
+    }
+    setRunsList(data);
     setRunsListOpen(true);
   }
 
@@ -273,7 +293,6 @@ export default function Home() {
 
   async function continueDirect() {
     if (!directResult?.messages) return;
-    addStyle(setDirectStylesUsed);
     setAskingDirect(true);
     const res = await fetch("/api/ask-direct", {
       method: "POST",
@@ -289,6 +308,7 @@ export default function Home() {
       }),
     });
     const data = await res.json();
+    addStyle(setDirectStylesUsed, data.argument_style);
     setDirectResult(data);
     setAskingDirect(false);
   }
@@ -314,7 +334,6 @@ export default function Home() {
 
   async function continuePlan() {
     if (!planResult?.messages) return;
-    addStyle(setPlanStylesUsed);
     setPlanning(true);
     const res = await fetch("/api/plan", {
       method: "POST",
@@ -330,6 +349,7 @@ export default function Home() {
       }),
     });
     const data = await res.json();
+    addStyle(setPlanStylesUsed, data.argument_style);
     setPlanResult(data);
     setSteps([]);
     setPlanning(false);
@@ -408,7 +428,6 @@ export default function Home() {
     if (!planResult?.plan) return;
     const nextIndex = steps.length;
     if (nextIndex >= planResult.plan.length) return;
-    addStyle(setPlanStylesUsed);
     const stepSpec = planResult.plan[nextIndex];
 
     const priorOutputs = {};
@@ -435,6 +454,9 @@ export default function Home() {
       }),
     });
     const data = await res.json();
+    // Zero adversary turns means no argument was ever made — the style
+    // setting had no effect, so it must not count toward "hybrid".
+    if (adversaryTurns > 0) addStyle(setPlanStylesUsed, data.argument_style);
     setSteps((prev) => [...prev, { ...data, tool: stepSpec.tool, args: resolvedArgs }]);
     setExecuting(false);
   }
@@ -444,7 +466,6 @@ export default function Home() {
     if (idx < 0) return;
     const s = steps[idx];
     if (!s.messages) return;
-    addStyle(setPlanStylesUsed);
     const stepSpec = planResult.plan[idx];
 
     setExecuting(true);
@@ -463,6 +484,7 @@ export default function Home() {
       }),
     });
     const data = await res.json();
+    addStyle(setPlanStylesUsed, data.argument_style);
     setSteps((prev) => {
       const next = [...prev];
       next[idx] = { ...data, tool: stepSpec.tool, args: s.args };
@@ -474,7 +496,6 @@ export default function Home() {
   async function retryLastStep() {
     const idx = steps.length - 1;
     if (idx < 0) return;
-    addStyle(setPlanStylesUsed);
     const stepSpec = planResult.plan[idx];
 
     const priorOutputs = {};
@@ -500,6 +521,9 @@ export default function Home() {
       }),
     });
     const data = await res.json();
+    // Zero adversary turns means no argument was ever made — the style
+    // setting had no effect, so it must not count toward "hybrid".
+    if (adversaryTurns > 0) addStyle(setPlanStylesUsed, data.argument_style);
     setSteps((prev) => {
       const next = [...prev];
       next[idx] = { ...data, tool: stepSpec.tool, args: resolvedArgs };
