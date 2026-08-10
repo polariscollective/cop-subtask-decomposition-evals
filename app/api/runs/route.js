@@ -18,20 +18,20 @@ export async function GET(req) {
   const supabase = getSupabaseClient();
 
   if (id) {
-    // Loading a run is how you continue and overwrite it, so it is restricted
-    // to your own runs — /runs links here for every row in the team-wide list,
-    // and without this you could load someone else's run, spend real money
-    // continuing it, and have the save silently write nothing.
-    // Other people's runs stay visible in aggregate through /compare.
+    // Reading a run stays team-wide: /compare's transcript modal is the only
+    // way to read a run's conversation, and the runs explorer is deliberately
+    // shared. What must NOT be shared is loading a run into the editor to
+    // continue and overwrite it — so the payload reports whether the caller
+    // owns it, and the client refuses to adopt an identity it doesn't own.
+    // The real write-side guard is POST /api/save-run's own ownership check.
     const userEmail = await getSessionEmail();
     if (!userEmail) {
       return NextResponse.json({ error: "not signed in" }, { status: 401 });
     }
     const { data: row, error } = await supabase
       .from("runs")
-      .select("data, style")
+      .select("data, style, user_email")
       .eq("id", id)
-      .eq("user_email", userEmail)
       .maybeSingle();
     if (error || !row) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -44,19 +44,26 @@ export async function GET(req) {
     // The column is the source of truth going forward, but batch rows predate
     // it and carry their style only in the blob — fall back rather than
     // shadowing a real value with null.
-    return NextResponse.json({ ...row.data, style: row.style ?? row.data?.style ?? null });
+    return NextResponse.json({
+      ...row.data,
+      style: row.style ?? row.data?.style ?? null,
+      owned: row.user_email === userEmail,
+    });
   }
 
   // The / page's "Browse saved runs" widget passes mine=true: it's the
   // surface you load a run from to continue and overwrite it, so it must
   // only ever offer runs the caller actually owns. /runs and /compare
   // pass nothing and keep their existing team-wide visibility.
-  let query = supabase.from("runs").select("id, style, data");
+  let query = supabase.from("runs").select("id, style, data, user_email");
+  // Resolved for every request, not just the scoped one: the team-wide list
+  // still has to say which rows are the caller's, so /runs can offer "Open"
+  // only where loading is actually allowed.
+  const userEmail = await getSessionEmail();
+  if (!userEmail) {
+    return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  }
   if (searchParams.get("mine") === "true") {
-    const userEmail = await getSessionEmail();
-    if (!userEmail) {
-      return NextResponse.json({ error: "not signed in" }, { status: 401 });
-    }
     query = query.eq("user_email", userEmail);
   }
   const { data: rows, error } = await query;
@@ -121,6 +128,7 @@ export async function GET(req) {
         // argument_style values still live in `data` and are shown by the
         // detail views that read it directly.
         style: row.style ?? content.style ?? null,
+        owned: row.user_email === userEmail,
         mode,
         accepted,
         step_accepted: stepAccepted,

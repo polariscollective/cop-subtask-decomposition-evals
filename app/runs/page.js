@@ -269,9 +269,13 @@ export default function RunsExplorer() {
                         {r.description || <span className="re-muted">—</span>}
                       </td>
                       <td>
-                        <a className="btn btn-ghost" href={`/?id=${encodeURIComponent(r.id)}`}>
-                          Open
-                        </a>
+                        {r.owned ? (
+                          <a className="btn btn-ghost" href={`/?id=${encodeURIComponent(r.id)}`}>
+                            Open
+                          </a>
+                        ) : (
+                          <span className="re-muted">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

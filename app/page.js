@@ -91,6 +91,11 @@ export default function Home() {
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
+  // Why its own state rather than reusing saveMessage: saveMessage only
+  // renders inside the planner-result card, which does not exist when a load
+  // fails, so a failure reported through it would be invisible. This renders
+  // in the always-present "Saved runs" card.
+  const [loadError, setLoadError] = useState(null);
   const [description, setDescription] = useState("");
   const [directDescription, setDirectDescription] = useState("");
 
@@ -201,7 +206,21 @@ export default function Home() {
   async function loadRun(id) {
     setLoadingRun(true);
     const res = await fetch(`/api/runs?id=${encodeURIComponent(id)}`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    // Nothing below this point may run on a failure: the setters would write
+    // undefined into scenarioId/framing and blank every result, leaving an
+    // unusable page with no error shown and any unsaved work discarded.
+    if (!res.ok) {
+      setLoadingRun(false);
+      setLoadError(`Could not load run: ${data.error || `HTTP ${res.status}`}`);
+      return;
+    }
+    if (!data.owned) {
+      setLoadingRun(false);
+      setLoadError("That run belongs to someone else — open it from the comparison view to read it.");
+      return;
+    }
+    setLoadError(null);
     setScenarioId(data.scenario_id);
     setFraming(data.framing);
     setDirectResult(data.direct_result || null);
@@ -523,6 +542,7 @@ export default function Home() {
             Manage scenarios ↗
           </a>
         </div>
+        {loadError && <p className="save-msg">{loadError}</p>}
         {runsListOpen &&
           (runsList.length === 0 ? (
             <p className="plan-caption">No saved runs yet — save one below once you have a result.</p>

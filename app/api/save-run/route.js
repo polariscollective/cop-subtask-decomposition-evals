@@ -58,7 +58,10 @@ export async function POST(req) {
       .eq("user_email", userEmail)
       .maybeSingle();
     if (readError) {
-      return NextResponse.json({ error: readError.message }, { status: 500 });
+      // A malformed runId reaches Postgres as an invalid uuid cast; surfacing
+      // the driver's message verbatim as a 500 is both wrong-status and
+      // needlessly leaky.
+      return NextResponse.json({ error: "invalid runId" }, { status: 400 });
     }
     if (!existing) {
       // Not ours, or gone. Reporting success here would tell the user their
@@ -69,7 +72,14 @@ export async function POST(req) {
     // /api/compare reads the style from the BLOB, not the column, so a run
     // that has become "hybrid" through manual continuation has to say so in
     // both places or it keeps aggregating under its original style.
-    const mergedData = { ...existing.data, ...run, style: style || null };
+    // Only overwrite result fields this save actually produced. `run` carries
+    // an explicit null for the other flow's results, and spreading that would
+    // erase a stored result rather than leave it alone.
+    const { direct_result, plan_result, steps: runSteps, ...runRest } = run;
+    const mergedData = { ...existing.data, ...runRest, style: style || null };
+    if (direct_result !== null) mergedData.direct_result = direct_result;
+    if (plan_result !== null) mergedData.plan_result = plan_result;
+    if (runSteps !== null) mergedData.steps = runSteps;
 
     const { error: updateError } = await supabase
       .from("runs")
