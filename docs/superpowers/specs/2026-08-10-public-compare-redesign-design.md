@@ -186,37 +186,41 @@ other notation explains itself where it appears, on hover and on focus:
 Wording is deliberately plain and full-sentence. These are read once, by
 someone who has never seen the project.
 
-### F. Data: compute "crossed", don't infer it from the count
+### F. "Crossed" stays the step count — but the invariant behind it becomes real
 
-`/api/compare` currently reports `depth` and `fullSteps`, and the UI treats
-`depth === fullSteps` as "reached every step".
+The critical tool is **always the last tool in the chain**. That is the
+project's working convention, and the page relies on it: `depth === fullSteps`
+is read as "crossed the critical step".
 
-Measured against the current 88 runs: every plan produced is 4 steps long and
-places `critical_tool` at position 4 of 4, so the two measures agree **on 26
-of 26 linear runs**. They agree by coincidence, not by construction:
+Today that reliance is unstated. `SCENARIO_FORMAT_PROMPT` tells generators
+*"FOUR tools, in execution order. The first gathers information. The last is
+the critical one"*, but `validateScenarioDoc` only requires `critical_tool` to
+match **some** tool name — so a scenario placing it third would be stored
+happily and would silently make every verdict on that scenario wrong.
 
-- The one-pager specifies chains of **4–5** calls.
-- Nothing constrains a model's plan to put the critical tool last.
-- A chained run calls tools freely; `tools_called` could contain the critical
-  tool without reaching the full count, or reach the full count having
-  substituted a tool.
+**The change is one validation rule, not new machinery:**
+`validateScenarioDoc` requires `critical_tool` to be the **last** entry in
+`tools`. Verified against every stored scenario — `single_point_of_command_v0`
+(`migrate_permissions`), `corporate_log_consolidation_v0`
+(`migrate_log_access`) and `tmp_sbuilder_task8_check`
+(`finalize_gateway_cutover`) all already satisfy it, so nothing breaks and no
+migration is needed. It also makes the format prompt's instruction enforceable
+rather than advisory, which matters now that scenarios are model-generated.
 
-So the route gains, per sample, a `crossedCritical` boolean computed from tool
-**names**:
+`/api/compare` is unchanged. No join with `scenarios`, no new derived field,
+no `crossedCritical` boolean.
 
-- **linear** — from `plan[i].tool` for each `steps[i].accepted`, checked
-  against the scenario's `critical_tool`. Verified available: all 26 stored
-  plans carry `.tool` on every step.
-- **chained** — from `direct_result.tools_called`. Verified available on all
-  38 stored chained runs.
+**Known limitation, accepted deliberately.** The *planner* writes its own plan,
+and `makePlanAcceptance` only requires the plan to call `critical_tool`
+somewhere — not last. All 26 stored plans put it last, but a model is free not
+to. If one ever places the critical call at step 3 of 4 and then stops at step
+3, the page will report "stopped short" for a run that in fact crossed.
 
-This requires joining each scenario's `critical_tool` into the compare
-response. `/api/compare` already reads the `runs` table; it gains a second
-read of `scenarios` (`scenario_id, data->critical_tool`) for the scenario ids
-in play, cached per request the same way batch manifests already are.
-
-`depth` and `fullSteps` stay — the bar still shows how far it got. Only the
-headline verdict moves off the count.
+That is a false negative on the project's headline claim, so it is worth
+naming precisely rather than leaving implicit. Revisit it when either
+condition appears: a scenario with a 5-tool chain, or a stored plan whose last
+step is not the critical tool. Both are cheap to detect from the run data if
+this ever needs auditing.
 
 ## Out of scope
 
@@ -237,12 +241,17 @@ crossed-critical computation, sorting the verdict strip). That logic moves
 into pure functions in `lib/`, testable under the `node --test` harness this
 repo now has:
 
-- `crossedCritical(sample, criticalTool)` — linear and chained shapes; the
-  critical tool absent; a plan whose critical tool is not last; `tools_called`
-  missing.
-- `mergeStyles(samples)` — best depth wins; crossed beats deeper-but-not-
-  crossed; empty input; all `n/a`.
+- `mergeStyles(samples)` — best depth wins; a crossed sample beats a
+  deeper-but-not-crossed one; empty input; every sample `n/a`.
 - `verdictRows(combos)` — ordering, attempt counts, which styles crossed
   first.
+
+The new validation rule extends the existing `tests/scenario-builder.test.js`
+coverage of `validateScenarioDoc` rather than adding a file:
+
+- a scenario whose `critical_tool` is the last tool passes;
+- one whose `critical_tool` names an earlier tool is rejected, with the error
+  on the `critical_tool` field;
+- the existing "names no tool at all" case still fails as it does today.
 
 No test drives a browser or calls a model API.
