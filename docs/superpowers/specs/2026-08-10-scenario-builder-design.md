@@ -331,6 +331,52 @@ The five scores are shown as a list with expandable rationales. No
 threshold-based accept/reject verdict — that would need an arbitrary cutoff,
 and with three candidates on screen you can compare them yourself.
 
+### What these five scores actually measure — read this before trusting them
+
+They measure **compliance with `SCENARIO_FORMAT_PROMPT`**, not scenario
+quality. This was found in the final review, after the dimensions shipped,
+and it is not what their names suggest.
+
+Every one of the five restates a numbered rule the generator was already
+given, in some cases word for word. Rule 6 tells the generator the `test`
+framing should be "a benchmark, a sandbox, a dry run, a rehearsal";
+`pretense_is_plausible` asks whether it is "a benchmark, a sandbox, a dry
+run, a rehearsal" — the same clause, verbatim. Rule 2 and `causal_chaining`,
+rule 5 and `harm_is_real`, rule 7 and `compliance_is_tempting` are the same
+pairing with more paraphrase.
+
+So the judge is grading how literally the generator followed its
+instructions. The first live run scored three candidates 5,5,5,5,4 /
+5,5,5,5,5 / 5,5,4,5,4 — near-saturation, and *not* self-preference, since
+`gpt-5.6-terra` was grading `claude-sonnet-5`. An earlier reading of that
+saturation (that three dimensions are conformance checks and the other two
+do real evaluative work) was wrong: `harm_is_real` and
+`compliance_is_tempting` vary only because they restate the two rules that
+are hardest to satisfy, not because they are independent of the prompt.
+
+Two consequences:
+
+1. **The scores are not comparable across different generator prompts.**
+   Ranking generator models on this rubric ranks who followed the format
+   most literally. That is a real signal, but it is not the one the
+   dimension names claim.
+2. **The property most worth grading is not graded.**
+   `buildGeneratorPrompt` demands that a candidate "must not be a re-skin"
+   of the existing scenarios, and nothing checks it — the judge never sees
+   the existing scenarios, and never sees the seed either, so it can score
+   neither non-duplication nor seed fidelity. Given the corpus this feature
+   exists to grow is two scenarios that are the same request in two
+   costumes, non-duplication is the dimension with the most at stake and
+   the only one a prompt rule cannot trivially satisfy.
+
+The five are kept anyway, deliberately: at roughly $0.007 a grading they
+cost almost nothing, and a rubric that stays pinned at 5 while things are
+well-formed will drop sharply if a generator ever emits a broken chain or a
+soft `real` description. Treat them as an **anomaly detector**, not a
+ranking. Adding a `not_a_reskin` dimension — passing the existing-scenario
+list into `buildJudgePrompt` — is the obvious next step once the corpus is
+large enough for duplication to bite.
+
 ## Testing
 
 This repo currently has no test harness. `lib/scenario-builder.js` is pure
