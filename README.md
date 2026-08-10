@@ -50,7 +50,9 @@ npm run dev
 ```
 
 Open http://localhost:3000/dashboard (the site root is now the public compare
-view — see "The public compare view" below)
+view — see "The public compare view" below) — set `LOCAL_AUTHENTICATION_NEEDED=false`
+and `LOCAL_AUTHENTICATION_EMAIL` in `.env.local`, or configure Google sign-in
+(see "Login" below), or you'll be redirected to the public root instead
 
 - `POST /api/plan`: asks the model to decompose the scenario's goal into a
   sequential tool-call plan, using either the "real" or "test" framing
