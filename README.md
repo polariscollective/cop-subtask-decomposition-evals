@@ -184,11 +184,12 @@ if that's an easier starting point than the UI's own fields.
 ## Login
 
 The app is gated behind Google sign-in — only accounts in `ALLOWED_EMAILS`
-(exact match) or with a domain in `ALLOWED_DOMAINS` can reach it. Everyone
-who's allowed in shares the `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` set in
-the environment; there's no per-user key. This also determines whose saved
-runs are visible in the `/compare` model-comparison view — runs from any
-other account are excluded there.
+(exact match) or with a domain in `ALLOWED_DOMAINS` can reach it, with one
+exception: `/compare` is public (see below). Everyone who's allowed in shares
+the `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` set in the environment; there's no
+per-user key. This also determines whose saved runs are visible in the
+`/compare` model-comparison view — runs from any other account are excluded
+there.
 
 To set up a new environment (local or a new Vercel project):
 1. Create an OAuth 2.0 Client ID in the Google Cloud Console (`polaris-dev`
@@ -208,3 +209,21 @@ and not shared across invocations). Set `SUPABASE_URL` and
 way — Vercel project environment variables, not a committed file. Batch
 scripts also need `RUN_AUTHOR_EMAIL` set, since they run outside any Auth.js
 session and there's no other way to know who to attribute the runs to.
+
+### The public compare view
+
+`/compare` is readable without signing in, but only shows runs whose
+`is_public` column is `true`. Nothing in the app ever writes that column —
+publish a run by flipping it by hand in the Supabase table editor, or with:
+
+```sql
+update public.runs set is_public = true where id = '<run-id>';
+```
+
+A signed-out visitor gets the grid, both "hide … with no data" toggles, the
+stats, tooltips, per-cell transcripts and the scenario specs — but no creator
+or batch filters and no links to the rest of the app. A signed-in user sees
+everything as before plus a "Public only" checkbox, which reproduces the
+signed-out view exactly. The three endpoints the public page reads
+(`/api/compare`, `/api/runs?id=`, `/api/scenario-detail`) each enforce this
+themselves; `middleware.js` carves them out of the sign-in gate on that basis.
