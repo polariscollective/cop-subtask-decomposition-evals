@@ -83,29 +83,50 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
       {["linear", "chained"].map((pipeline) => {
         const d = bestOf(styles.map((s) => cellData(pipeline, model, scenario, s)));
         const state = cellState(d);
+        // A plan that was accepted and then stalled at step 1 must not look
+        // identical to ordinary lack of progress — that's the "different
+        // finding" the legend calls out.
+        const noPlan = d && d.pipeline === "linear" && d.depth === 0 && !d.planAccepted;
         return (
           <button
             type="button"
             key={pipeline}
-            className={`cmp-cell ${state}`}
+            className={`cmp-pipe-cell ${state}`}
             disabled={!d}
             onClick={() => d && onOpen(d)}
             title={PIPELINE_LABELS[pipeline]}
           >
-            <span className="cmp-pipe-tag" title={PIPELINE_NOTES[pipeline]}>
-              {PIPELINE_LABELS[pipeline]}
+            <span className="cmp-pipe-line1">
+              <span className="cmp-pipe-tag" title={PIPELINE_NOTES[pipeline]}>
+                {PIPELINE_LABELS[pipeline]}
+              </span>
+              {d ? (
+                <>
+                  <StepBar depth={d.depth} total={d.fullSteps} />
+                  <span className="cmp-frac">
+                    {state === "crossed" && <span className="cmp-crossed-mark">⚠ </span>}
+                    {noPlan ? "no plan" : `${d.depth}/${d.fullSteps}`}
+                    {d.anyRunning && <span className="cmp-running-mark">*</span>}
+                    {d.pipeline === "linear" && d.planAccepted && (
+                      <span
+                        className={`cmp-framing-letter ${
+                          d.planFraming === "test" ? "cmp-framing-test" : "cmp-framing-real"
+                        }`}
+                      >
+                        {d.planFraming === "test" ? "T" : "R"}
+                      </span>
+                    )}
+                  </span>
+                </>
+              ) : (
+                <span className="cmp-frac">n/a</span>
+              )}
             </span>
-            {d ? (
-              <>
-                <StepBar depth={d.depth} total={d.fullSteps} />
-                <span className="cmp-frac">
-                  {state === "crossed" && <span className="cmp-crossed-mark">⚠ </span>}
-                  {d.depth}/{d.fullSteps}
-                </span>
-              </>
-            ) : (
-              <span className="cmp-frac">n/a</span>
+            {d && d.depth > 0 && <div className="cmp-turns">{d.turnsUsed} turns</div>}
+            {d && d.pipeline === "linear" && d.depth === 0 && d.planAccepted && (
+              <div className="cmp-turns">plan ok, step 1 refused</div>
             )}
+            {d && d.sampleCount > 1 && <div className="cmp-turns">best of {d.sampleCount}</div>}
           </button>
         );
       })}
@@ -116,7 +137,6 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
 export default function CompareGrid({ signedIn, researchDirectionUrl }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
-  const [tooltip, setTooltip] = useState(null); // { x, y, row }
   const [modalCombo, setModalCombo] = useState(null);
   const [detailScenario, setDetailScenario] = useState(null); // { id, title }
   // Default hidden: with 10 styles × 3 models, most cells are "n/a" until
@@ -487,69 +507,81 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
             Show each argument style separately ({visibleStyles.length})
           </label>
 
-          {scenarios.map((scenario) => (
-            <section key={scenario.id} className="cmp-scenario">
-              <div className="cmp-scenario-head">
-                <h2 className="cmp-scenario-title">{scenario.title}</h2>
-                <button
-                  type="button"
-                  className="cmp-scenario-trigger"
-                  onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
-                >
-                  <span className="cmp-scenario-hint">Click here for more details</span>
-                </button>
-              </div>
-              <div className="card cmp-panel">
-                <div className="cmp-table-scroll">
-                  <table className="cmp-grid">
-                    <thead>
-                      <tr>
-                        <th className="cmp-style-label cmp-sticky"></th>
-                        {visibleModels.map((m) => (
-                          <th key={m} className="cmp-model-head">
-                            {modelLabel(m)}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="cmp-best-row">
-                        <td className="cmp-style-label cmp-sticky">Best of any style</td>
-                        {visibleModels.map((model) => (
-                          <td key={model} className="cmp-cell-wrap">
-                            <PipelinePair
-                              model={model}
-                              scenario={scenario.id}
-                              styles={visibleStyles}
-                              cellData={cellData}
-                              onOpen={setModalCombo}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                      {expandStyles &&
-                        visibleStyles.map((style) => (
-                          <tr key={style}>
-                            <td className="cmp-style-label cmp-sticky">{style.replace(/_/g, " ")}</td>
-                            {visibleModels.map((model) => (
-                              <td key={model} className="cmp-cell-wrap">
-                                <PipelinePair
-                                  model={model}
-                                  scenario={scenario.id}
-                                  styles={[style]}
-                                  cellData={cellData}
-                                  onOpen={setModalCombo}
-                                />
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+          {scenarios.map((scenario) => {
+            // /api/scenario-detail 404s anonymously for a scenario with no
+            // published (and allowlisted) run — a signed-in user can still
+            // reach any scenario there. Only make the title clickable when
+            // it would actually open something: otherwise, with today's data
+            // (one scenario fully published, the other not at all), half the
+            // titles on the flagship public page are dead clicks that land
+            // on a bare "Failed to load: HTTP 404" in the modal.
+            const canOpen = signedIn || filteredRows.some((r) => r.scenario === scenario.id);
+            return (
+              <section key={scenario.id} className="cmp-scenario">
+                <div className="cmp-scenario-head">
+                  <h2 className="cmp-scenario-title">{scenario.title}</h2>
+                  {canOpen && (
+                    <button
+                      type="button"
+                      className="cmp-scenario-trigger"
+                      onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
+                    >
+                      <span className="cmp-scenario-hint">Click here for more details</span>
+                    </button>
+                  )}
                 </div>
-              </div>
-            </section>
-          ))}
+                <div className="card cmp-panel">
+                  <div className="cmp-table-scroll">
+                    <table className="cmp-grid">
+                      <thead>
+                        <tr>
+                          <th className="cmp-style-label cmp-sticky"></th>
+                          {visibleModels.map((m) => (
+                            <th key={m} className="cmp-model-head">
+                              {modelLabel(m)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="cmp-best-row">
+                          <td className="cmp-style-label cmp-sticky">Best of any style</td>
+                          {visibleModels.map((model) => (
+                            <td key={model} className="cmp-cell-wrap">
+                              <PipelinePair
+                                model={model}
+                                scenario={scenario.id}
+                                styles={visibleStyles}
+                                cellData={cellData}
+                                onOpen={setModalCombo}
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                        {expandStyles &&
+                          visibleStyles.map((style) => (
+                            <tr key={style}>
+                              <td className="cmp-style-label cmp-sticky">{style.replace(/_/g, " ")}</td>
+                              {visibleModels.map((model) => (
+                                <td key={model} className="cmp-cell-wrap">
+                                  <PipelinePair
+                                    model={model}
+                                    scenario={scenario.id}
+                                    styles={[style]}
+                                    cellData={cellData}
+                                    onOpen={setModalCombo}
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            );
+          })}
 
           <details className="tablewrap" style={{ marginTop: 8 }}>
             <summary>View as a table</summary>
@@ -593,55 +625,6 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
             </div>
           </details>
         </>
-      )}
-
-      {tooltip && (
-        <div className="cmp-tooltip" style={{ left: Math.min(tooltip.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 280), top: tooltip.y }}>
-          <div className="cmp-tt-val">
-            {!tooltip.d
-              ? "No run for this model"
-              : tooltip.d.pipeline === "linear" && tooltip.d.depth === 0 && !tooltip.d.planAccepted
-              ? "Plan itself was refused"
-              : `Reached ${tooltip.d.depth} of ${tooltip.d.fullSteps}`}
-          </div>
-          {tooltip.d && tooltip.d.pipeline === "linear" && (
-            <div className="cmp-tt-row">Plan accepted: {tooltip.d.planAccepted ? "yes" : "no"}</div>
-          )}
-          <div className="cmp-tt-row">
-            {tooltip.model} · {tooltip.pipeline}
-          </div>
-          <div className="cmp-tt-row">
-            {tooltip.scenario} · style: {tooltip.style}
-          </div>
-          {tooltip.d && tooltip.d.depth > 0 && <div className="cmp-tt-row">Executor turns used: {tooltip.d.turnsUsed}</div>}
-          {tooltip.d && tooltip.d.pipeline === "linear" && tooltip.d.planAccepted && (
-            <div className="cmp-tt-row">
-              {tooltip.d.planFraming === "test" ? (
-                <>
-                  <span className="cmp-framing-letter cmp-framing-test">T</span> plan needed test framing — real
-                  framing was tried first and fully refused (not counted in turns above; see transcript)
-                </>
-              ) : (
-                <>
-                  <span className="cmp-framing-letter cmp-framing-real">R</span> plan accepted under real framing,
-                  no fallback needed
-                </>
-              )}
-            </div>
-          )}
-          {tooltip.d && tooltip.d.sampleCount > 1 && (
-            <div className="cmp-tt-row">
-              Best of {tooltip.d.sampleCount} samples ({tooltip.d.completedCount}/{tooltip.d.sampleCount} fully completed)
-            </div>
-          )}
-          {tooltip.d && tooltip.d.completed && <div className="cmp-tt-row">Fully completed, including the critical step.</div>}
-          {tooltip.d?.anyRunning && (
-            <div className="cmp-tt-row">
-              <span className="cmp-running-mark">*</span> batch still running — may still progress further
-            </div>
-          )}
-          {tooltip.d?.id && <div className="cmp-tt-row" style={{ marginTop: 4, opacity: 1 }}>Click to read the full transcript ▸</div>}
-        </div>
       )}
 
       <RunTranscriptModal combo={modalCombo} onClose={() => setModalCombo(null)} />
