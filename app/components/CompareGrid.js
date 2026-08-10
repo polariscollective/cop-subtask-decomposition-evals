@@ -68,14 +68,6 @@ function StepBar({ depth, total }) {
 // list so the same component serves a single-style row and the merged
 // "best of any style" row.
 const PIPELINE_LABELS = { linear: "P→E", chained: "CHN" };
-// The panel headers that used to carry these sentences are gone in the
-// merged grid; this is the only place left that explains what "linear" and
-// "chained" mean. Surfaced as a title attribute (hover) on each pipeline tag
-// until Task 7 wires it into a richer explanation mechanism.
-const PIPELINE_NOTES = {
-  linear: "blind, amnesiac executor — one step at a time, no memory of prior steps",
-  chained: "one continuous conversation — full memory of every prior tool call",
-};
 
 function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
   return (
@@ -97,40 +89,79 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
             title={PIPELINE_LABELS[pipeline]}
           >
             <span className="cmp-pipe-line1">
-              <span className="cmp-pipe-tag" title={PIPELINE_NOTES[pipeline]}>
-                {PIPELINE_LABELS[pipeline]}
-              </span>
+              <Note kind={pipeline}>
+                <span className="cmp-pipe-tag">{PIPELINE_LABELS[pipeline]}</span>
+              </Note>
               {d ? (
                 <>
                   <StepBar depth={d.depth} total={d.fullSteps} />
                   <span className="cmp-frac">
                     {state === "crossed" && <span className="cmp-crossed-mark">⚠ </span>}
-                    {noPlan ? "no plan" : `${d.depth}/${d.fullSteps}`}
-                    {d.anyRunning && <span className="cmp-running-mark">*</span>}
+                    {noPlan ? <Note kind="noPlan">no plan</Note> : `${d.depth}/${d.fullSteps}`}
+                    {d.anyRunning && (
+                      <Note kind="running">
+                        <span className="cmp-running-mark">*</span>
+                      </Note>
+                    )}
                     {d.pipeline === "linear" && d.planAccepted && (
-                      <span
-                        className={`cmp-framing-letter ${
-                          d.planFraming === "test" ? "cmp-framing-test" : "cmp-framing-real"
-                        }`}
-                      >
-                        {d.planFraming === "test" ? "T" : "R"}
-                      </span>
+                      <Note kind={d.planFraming === "test" ? "T" : "R"}>
+                        <span
+                          className={`cmp-framing-letter ${
+                            d.planFraming === "test" ? "cmp-framing-test" : "cmp-framing-real"
+                          }`}
+                        >
+                          {d.planFraming === "test" ? "T" : "R"}
+                        </span>
+                      </Note>
                     )}
                   </span>
                 </>
               ) : (
-                <span className="cmp-frac">n/a</span>
+                <Note kind="na">
+                  <span className="cmp-frac">n/a</span>
+                </Note>
               )}
             </span>
             {d && d.depth > 0 && <div className="cmp-turns">{d.turnsUsed} turns</div>}
             {d && d.pipeline === "linear" && d.depth === 0 && d.planAccepted && (
-              <div className="cmp-turns">plan ok, step 1 refused</div>
+              <Note kind="planRefused">
+                <div className="cmp-turns">plan ok, step 1 refused</div>
+              </Note>
             )}
-            {d && d.sampleCount > 1 && <div className="cmp-turns">best of {d.sampleCount}</div>}
+            {d && d.sampleCount > 1 && (
+              <Note kind="bestOf">
+                <div className="cmp-turns">best of {d.sampleCount}</div>
+              </Note>
+            )}
           </button>
         );
       })}
     </div>
+  );
+}
+
+// Each notation explains itself where it appears, rather than in a block of
+// footnotes above a grid the reader has not looked at yet. Full sentences on
+// purpose: these are read once, by someone who has never seen the project.
+const NOTES = {
+  T: "Test framing. Changes only the tool descriptions shown to the planner, and only during planning. Every execution step afterwards uses the real tool descriptions and the real goal. It's a workaround to get a plan out — and one that exists in real life.",
+  R: "Real framing. The plan was accepted without any pretext.",
+  bestOf:
+    "This combination was run more than once; the deepest run is shown. Models are not deterministic and results near a decision boundary flip between runs.",
+  noPlan: "The model refused to produce a plan at all, so no step was ever executed.",
+  planRefused:
+    "It agreed to the plan, then refused the first tool call — a different finding from refusing to plan.",
+  na: "This combination has not been run yet.",
+  running: "Batch still running — this number may still change.",
+  linear: "blind, amnesiac executor — one step at a time, no memory of prior steps",
+  chained: "one continuous conversation — full memory of every prior tool call",
+};
+
+function Note({ kind, children }) {
+  return (
+    <span className="cmp-note" tabIndex={0} aria-label={NOTES[kind]} title={NOTES[kind]}>
+      {children}
+    </span>
   );
 }
 
@@ -397,37 +428,14 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
             ))}
           </section>
 
-          <section className="card cmp-legend">
-            <div className="cmp-legend-group">
-              <span style={{ color: "var(--ink-2)" }}>Steps/tools reached</span>
-              <div className="cmp-ramp">
-                <span className="cmp-d0">0</span>
-                <span className="cmp-d1">1</span>
-                <span className="cmp-d2">2</span>
-                <span className="cmp-d3">3</span>
-                <span className="cmp-d4">4</span>
-              </div>
-            </div>
-            <div className="cmp-legend-group">
-              <span className="cmp-na-swatch" /> no data for this model
-            </div>
-            <div className="cmp-legend-group">
-              <span className="cmp-plan-refused-swatch" /> plan itself refused (linear only — 0/4 with an accepted
-              plan means step 1 refused, a different finding)
-            </div>
-            <div className="cmp-legend-group">
-              <span className="cmp-running-mark">*</span> batch still running — numbers may still change
-            </div>
-            <div className="cmp-legend-group">
-              <span className="cmp-framing-letter cmp-framing-real">R</span>/
-              <span className="cmp-framing-letter cmp-framing-test">T</span> plan accepted under real framing
-              straightaway, vs. only after real framing was fully tried and refused first, then a fresh test-framing
-              attempt succeeded (turn count shown is for that winning attempt alone — open the transcript to see the
-              discarded real-framing attempt too)
-            </div>
-            <div className="cmp-legend-group">
-              <span className="cmp-fullreached-swatch" /> reached every step — the one outcome that actually matters
-              here, marked regardless of depth color
+          <section className="card cmp-controls">
+            <div className="cmp-key">
+              <span className="cmp-key-item">
+                <StepBar depth={2} total={4} /> steps reached
+              </span>
+              <span className="cmp-key-item">
+                <span className="cmp-key-swatch" /> ⚠ crossed the critical step
+              </span>
             </div>
             <label className="cmp-legend-group cmp-toggle">
               <input type="checkbox" checked={hideEmptyStyles} onChange={(e) => setHideEmptyStyles(e.target.checked)} />
