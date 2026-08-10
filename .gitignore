@@ -2,6 +2,6 @@ node_modules
 .next
 .env.local
 .env
-runs
+/runs
 .DS_Store
 .superpowers
