@@ -223,7 +223,10 @@ update public.runs set is_public = true where id = '<run-id>';
 A signed-out visitor gets the grid, both "hide … with no data" toggles, the
 stats, tooltips, per-cell transcripts and the scenario specs — but no creator
 or batch filters and no links to the rest of the app. A signed-in user sees
-everything as before plus a "Public only" checkbox, which reproduces the
-signed-out view exactly. The three endpoints the public page reads
+everything as before plus a "Public only" checkbox, which narrows the grid
+data down to exactly the signed-out dataset — the creator pills, batch
+picker and nav links to the rest of the app stay visible regardless, since
+those are gated on being signed in, not on the checkbox. The three endpoints
+the public page reads
 (`/api/compare`, `/api/runs?id=`, `/api/scenario-detail`) each enforce this
 themselves; `middleware.js` carves them out of the sign-in gate on that basis.
