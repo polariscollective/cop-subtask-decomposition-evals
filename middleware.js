@@ -35,8 +35,12 @@ export default auth((req) => {
 // and the public compare view. That last group is /compare plus the three
 // endpoints it reads — each of which does its own session check and serves
 // nothing but published runs to an anonymous caller (see app/api/compare,
-// app/api/runs and app/api/scenario-detail). The (?:/|$) on each keeps the
-// carve-out from matching a longer sibling path like /compare-internal.
+// app/api/runs and app/api/scenario-detail). The carve-out is whole-path,
+// not per-method, so it also covers /api/scenario-detail's PUT and DELETE —
+// safe, since both start with requireOwnedScenario(), which 401s on a
+// missing session before touching the DB or parsing a body. The (?:/|$) on
+// each keeps the carve-out from matching a longer sibling path like
+// /compare-internal.
 export const config = {
   matcher: [
     "/((?!api/auth(?:/|$)|api/compare(?:/|$)|api/runs(?:/|$)|api/scenario-detail(?:/|$)|compare(?:/|$)|_next/static|_next/image|favicon.ico).*)",

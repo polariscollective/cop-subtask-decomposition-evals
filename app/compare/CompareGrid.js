@@ -345,23 +345,36 @@ export default function CompareGrid({ signedIn }) {
             </div>
           </section>
 
-          {SCENARIOS.map((scenario) => (
+          {SCENARIOS.map((scenario) => {
+            // /api/scenario-detail 404s anonymously for a scenario with no
+            // published (and allowlisted) run — a signed-in user can still
+            // reach any scenario there. Only make the title clickable when
+            // it would actually open something: otherwise, with today's data
+            // (one scenario fully published, the other not at all), half the
+            // titles on the flagship public page are dead clicks that land
+            // on a bare "Failed to load: HTTP 404" in the modal.
+            const canOpen = signedIn || filteredRows.some((r) => r.scenario === scenario.id);
+            return (
             <section key={scenario.id} className="cmp-scenario">
-              <h2
-                className="cmp-scenario-title"
-                style={{ cursor: "pointer" }}
-                role="button"
-                tabIndex={0}
-                onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setDetailScenario({ id: scenario.id, title: scenario.title });
-                  }
-                }}
-              >
-                {scenario.title}
-              </h2>
+              {canOpen ? (
+                <h2
+                  className="cmp-scenario-title"
+                  style={{ cursor: "pointer" }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setDetailScenario({ id: scenario.id, title: scenario.title });
+                    }
+                  }}
+                >
+                  {scenario.title}
+                </h2>
+              ) : (
+                <h2 className="cmp-scenario-title">{scenario.title}</h2>
+              )}
               <div className="cmp-panels">
                 {PIPELINES.map((pipeline) => (
                   <div key={pipeline.id} className="card cmp-panel">
@@ -464,7 +477,8 @@ export default function CompareGrid({ signedIn }) {
                 ))}
               </div>
             </section>
-          ))}
+            );
+          })}
 
           <details className="tablewrap" style={{ marginTop: 8 }}>
             <summary>View as a table</summary>

@@ -220,9 +220,15 @@ publish a run by flipping it by hand in the Supabase table editor, or with:
 update public.runs set is_public = true where id = '<run-id>';
 ```
 
+Publishing exposes that run's entire stored blob, not just what the grid
+displays — including its free-text `description` and the full model
+transcripts. Read a run before publishing it.
+
 A signed-out visitor gets the grid, both "hide … with no data" toggles, the
-stats, tooltips, per-cell transcripts and the scenario specs — but no creator
-or batch filters and no links to the rest of the app. A signed-in user sees
+stats, tooltips, per-cell transcripts, and — for a scenario with at least one
+published run — its scenario spec (scenarios with none 404). There are no
+creator or batch filters, and no page-navigation links to the rest of the
+app, though a "Sign in" link is always shown. A signed-in user sees
 everything as before plus a "Public only" checkbox, which narrows the grid
 data down to exactly the signed-out dataset — the creator pills, batch
 picker and nav links to the rest of the app stay visible regardless, since
