@@ -61,7 +61,7 @@ function cellClass(d) {
   return classes.join(" ");
 }
 
-export default function CompareGrid({ signedIn }) {
+export default function CompareGrid({ signedIn, researchDirectionUrl }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [tooltip, setTooltip] = useState(null); // { x, y, row }
@@ -248,6 +248,12 @@ export default function CompareGrid({ signedIn }) {
             evaluation runs—feel free to contact{" "}
             <a href="mailto:sam@polariscollective.org">sam@polariscollective.org</a>.
           </p>
+          {researchDirectionUrl && (
+            <p>
+              <strong>More info:</strong>{" "}
+              <a href={researchDirectionUrl}>Information about the research direction</a>
+            </p>
+          )}
         </aside>
       )}
 

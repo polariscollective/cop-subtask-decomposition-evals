@@ -8,5 +8,6 @@ import CompareGrid from "./components/CompareGrid";
 // the signed-in UI first.
 export default async function HomePage() {
   const email = await getSessionEmail();
-  return <CompareGrid signedIn={Boolean(email)} />;
+  const researchDirectionUrl = process.env.RESEARCH_DIRECTION_URL?.trim() || null;
+  return <CompareGrid signedIn={Boolean(email)} researchDirectionUrl={researchDirectionUrl} />;
 }
