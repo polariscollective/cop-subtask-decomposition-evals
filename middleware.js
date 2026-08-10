@@ -17,12 +17,36 @@ import { auth } from "./auth";
 const skipAuthInDev =
   process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTHENTICATION_NEEDED === "false";
 
+// Exact paths readable without a session. A Set of exact strings rather than
+// a pattern: the negative-lookahead matcher this replaces produced two
+// separate path-boundary defects, and both were the same shape — a string
+// that merely STARTED with a public path was treated as public. Exact
+// matching cannot express that bug, so /comparex can never inherit
+// /compare's access.
+//
+// Note this is per-path, not per-route-tree: adding app/api/runs/foo/route.js
+// would NOT make it public, it would have to be listed here. That is the
+// safer default, and the opposite of what the old matcher did.
+const PUBLIC_PATHS = new Set(["/compare", "/api/compare", "/api/runs", "/api/scenario-detail"]);
+
+// Auth.js's own endpoints are a genuine subtree (/api/auth/signin,
+// /api/auth/callback/google, …), so this one is a prefix test — with the
+// trailing slash, so /api/authx doesn't match it.
+function isPublicPath(pathname) {
+  // Next.js normalises trailing slashes before middleware, but strip one
+  // anyway so a direct request for /api/runs/ resolves like /api/runs. The
+  // length guard keeps "/" from normalising to "".
+  const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+  return PUBLIC_PATHS.has(path) || path === "/api/auth" || path.startsWith("/api/auth/");
+}
+
 export default auth((req) => {
+  const { pathname } = req.nextUrl;
+  if (isPublicPath(pathname)) return NextResponse.next();
   if (skipAuthInDev) return NextResponse.next();
   if (req.auth) return NextResponse.next();
 
-  const isApiRoute = req.nextUrl.pathname.startsWith("/api/");
-  if (isApiRoute) {
+  if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -31,18 +55,12 @@ export default auth((req) => {
   return NextResponse.redirect(signInUrl);
 });
 
-// Everything is gated except: Auth.js's own endpoints, Next's static assets,
-// and the public compare view. The carve-out is whole-path, not per-method,
-// so it also exposes /api/scenario-detail's PUT and DELETE — safe, since
-// both start with requireOwnedScenario(), which 401s on a missing session
-// before touching the DB or parsing a body. Aside from that, the carved-out
-// group is /compare plus the three endpoints it reads — each of which does
-// its own session check and serves nothing but published runs to an
-// anonymous caller (see app/api/compare, app/api/runs and
-// app/api/scenario-detail). The (?:/|$) on each keeps the carve-out from
-// matching a longer sibling path like /compare-internal.
+// Only static assets skip middleware now — the access decision lives in the
+// handler above, not in this pattern. Each exclusion is anchored: the two
+// directories with a trailing slash, favicon with an escaped dot and $.
+// Left unanchored (as they were), /favicon.icoX and /_next/staticfoo skip
+// the gate entirely, which is the same defect this file has already had
+// twice.
 export const config = {
-  matcher: [
-    "/((?!api/auth(?:/|$)|api/compare(?:/|$)|api/runs(?:/|$)|api/scenario-detail(?:/|$)|compare(?:/|$)|_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static/|_next/image/|favicon\\.ico$).*)"],
 };
