@@ -20,17 +20,27 @@ export async function GET(req) {
   // response doesn't distinguish "unpublished" from "does not exist".
   const userEmail = await getSessionEmail();
   if (!userEmail) {
-    // Mirror /api/compare's gate exactly, not just "published": a published
-    // run from a non-allowlisted account (e.g. a QA account like
-    // reviewer-verify@example.com) never appears in the /compare grid, so it
-    // must not be able to unlock a scenario spec here either. Fails closed —
-    // a query error, no rows, or no allowlisted row all produce the same 404.
+    // Mirror /api/compare's inclusion rule exactly, on both axes it checks —
+    // not just "published": a published run from a non-allowlisted account
+    // (e.g. a QA account like reviewer-verify@example.com), or one whose
+    // blob has no recognized run_kind (e.g. a manually-saved run — see
+    // app/api/save-run/route.js, which never sets run_kind; only the batch
+    // scripts do), never appears in the /compare grid, so it must not be
+    // able to unlock a scenario spec here either. Fails closed — a query
+    // error, no rows, or no row satisfying both conditions all produce the
+    // same 404.
     const { data: candidates, error: candidatesError } = await supabase
       .from("runs")
-      .select("user_email")
+      .select("data, user_email")
       .eq("scenario_id", scenarioId)
       .eq("is_public", true);
-    const allowed = !candidatesError && (candidates || []).some((r) => isAllowedEmail(r.user_email));
+    const allowed =
+      !candidatesError &&
+      (candidates || []).some(
+        (r) =>
+          isAllowedEmail(r.user_email) &&
+          (r.data?.run_kind === "linear" || r.data?.run_kind === "chained")
+      );
     if (!allowed) {
       return NextResponse.json({ error: `Scenario not found: ${scenarioId}` }, { status: 404 });
     }

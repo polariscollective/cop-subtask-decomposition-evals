@@ -226,7 +226,9 @@ transcripts. Read a run before publishing it.
 
 A signed-out visitor gets the grid, both "hide … with no data" toggles, the
 stats, tooltips, per-cell transcripts, and — for a scenario with at least one
-published run — its scenario spec (scenarios with none 404). There are no
+published run from a recognized account and of a recognized kind, i.e. one
+that actually appears in the grid — its scenario spec (scenarios with none
+404). There are no
 creator or batch filters, and no page-navigation links to the rest of the
 app, though a "Sign in" link is always shown. A signed-in user sees
 everything as before plus a "Public only" checkbox, which narrows the grid
