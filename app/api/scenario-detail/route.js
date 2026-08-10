@@ -11,6 +11,24 @@ export async function GET(req) {
   }
 
   const supabase = getSupabaseClient();
+
+  // Anonymous readers reach this only from the public /compare grid, where a
+  // scenario title opens its spec. Tie that to publication rather than
+  // serving every scenario: otherwise a scenario nobody has published
+  // anything for is readable by guessing its id. Same 404 either way, so the
+  // response doesn't distinguish "unpublished" from "does not exist".
+  const userEmail = await getSessionEmail();
+  if (!userEmail) {
+    const { count, error: countError } = await supabase
+      .from("runs")
+      .select("id", { count: "exact", head: true })
+      .eq("scenario_id", scenarioId)
+      .eq("is_public", true);
+    if (countError || !count) {
+      return NextResponse.json({ error: `Scenario not found: ${scenarioId}` }, { status: 404 });
+    }
+  }
+
   const { data: row, error } = await supabase
     .from("scenarios")
     .select("data, created_by, deleted_at")
