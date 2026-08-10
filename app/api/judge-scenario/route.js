@@ -3,29 +3,10 @@ import { getSessionEmail } from "../../../auth";
 import { validateScenarioDoc } from "../../../lib/scenarios";
 import { callModel } from "../../../lib/providers";
 import { costForCall, providerForModel } from "../../../lib/models";
-import { buildJudgePrompt, parseJudgeVerdict } from "../../../lib/scenario-builder";
+import { buildJudgePrompt, parseJudgeVerdict, refusalMessage, truncationMessage } from "../../../lib/scenario-builder";
 
 // Five scores and five one-sentence rationales.
 const MAX_TOKENS = 1500;
-
-// stopReason "refusal" means the provider blocked the request server-side,
-// before the model meaningfully responded — see the doc comment above
-// callModel in lib/providers.js. That's a different failure from the model
-// writing malformed JSON, and here it matters even more than it does for
-// /api/generate-scenario: this endpoint grades scenarios about removing
-// human oversight, plausible refusal-trigger content, and the whole point
-// of the feature is comparing judge models against each other. A model
-// that won't grade the content must look different from one that can't
-// format its answer. stopDetails is Anthropic-only (OpenAI content_filter
-// and Google SAFETY/PROHIBITED_CONTENT are normalised to stopReason
-// "refusal" with no stopDetails), so the message must stand on its own
-// without it.
-function refusalMessage(result) {
-  const parts = ["the provider blocked this request before the model produced a response — this is not a formatting problem"];
-  if (result.stopDetails?.category) parts.push(`category: ${result.stopDetails.category}`);
-  if (result.stopDetails?.explanation) parts.push(result.stopDetails.explanation);
-  return parts.join(" — ");
-}
 
 export async function POST(req) {
   // Same reasoning as /api/generate-scenario — this route spends the org's
@@ -74,16 +55,25 @@ export async function POST(req) {
       inputTokens: response.usage.inputTokens,
       outputTokens: response.usage.outputTokens,
     });
-    // A platform-level content block (stopReason "refusal") means there is
-    // nothing to parse — response.text is empty, and parseJudgeVerdict("")
-    // would return the same "no fenced json block" error a badly-formatted
-    // judge model produces. Surface it as its own error instead so a caller
-    // comparing judge models can tell "refused to grade" from "couldn't
-    // format its answer".
-    const verdict =
-      response.stopReason === "refusal"
-        ? { ok: false, scores: {}, error: refusalMessage(response) }
-        : parseJudgeVerdict(response.text);
+    // A content block and a truncation both leave parseJudgeVerdict with
+    // nothing to find, so both would otherwise surface as the same "no fenced
+    // json block" error a badly-formatted judge produces. Naming them matters
+    // more here than in the generate route: this endpoint exists to compare
+    // judge models, so "refused to grade this content" and "ran out of budget
+    // before answering" have to be readable as different verdicts.
+    //
+    // Truncation is not hypothetical. gemini-pro-latest is a reasoning model
+    // and spends this 1500-token budget thinking before it ever emits the
+    // JSON block — which read as a formatting failure until this branch
+    // existed, and cost that model its place as a usable judge.
+    let verdict;
+    if (response.stopReason === "refusal") {
+      verdict = { ok: false, scores: {}, error: refusalMessage(response) };
+    } else if (response.truncated) {
+      verdict = { ok: false, scores: {}, error: truncationMessage(MAX_TOKENS) };
+    } else {
+      verdict = parseJudgeVerdict(response.text);
+    }
 
     return NextResponse.json({
       ok: verdict.ok,

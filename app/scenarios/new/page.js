@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import yaml from "js-yaml";
 import ScenarioForm, { emptyScenarioForm, docToFormState } from "../../components/ScenarioForm";
-
-// Written by app/scenarios/generate/page.js.
-const PROMOTED_SCENARIO_KEY = "generatedScenario";
+import { PROMOTED_SCENARIO_KEY } from "../../../lib/promoted-scenario";
 
 export default function NewScenarioPage() {
   const router = useRouter();

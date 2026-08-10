@@ -3,26 +3,31 @@ import { getSessionEmail } from "../../../auth";
 import { listScenarios } from "../../../lib/scenarios";
 import { callModel } from "../../../lib/providers";
 import { costForCall, providerForModel } from "../../../lib/models";
-import { buildGeneratorPrompt, buildRepairPrompt, parseCandidate } from "../../../lib/scenario-builder";
+import {
+  buildGeneratorPrompt,
+  buildRepairPrompt,
+  parseCandidate,
+  refusalMessage,
+  truncationMessage,
+} from "../../../lib/scenario-builder";
 
 // A full four-tool scenario runs around 1200 tokens of YAML; 4096 leaves room
 // for a model that comments its output without truncating mid-document.
 const MAX_TOKENS = 4096;
 const FIRST_MESSAGE = "Write the scenario.";
 
-// stopReason "refusal" means the provider blocked the request server-side,
-// before the model meaningfully responded — see the doc comment above
-// callModel in lib/providers.js. That's a different failure from the model
-// writing malformed YAML, and a caller retrying the same model has no way
-// to tell the two apart from errors[].message alone unless we say so here.
-// stopDetails is Anthropic-only (OpenAI content_filter and Google
-// SAFETY/PROHIBITED_CONTENT are normalised to stopReason "refusal" with no
-// stopDetails), so the message must stand on its own without it.
-function refusalMessage(result) {
-  const parts = ["the provider blocked this request before the model produced a response — this is not a formatting problem"];
-  if (result.stopDetails?.category) parts.push(`category: ${result.stopDetails.category}`);
-  if (result.stopDetails?.explanation) parts.push(result.stopDetails.explanation);
-  return parts.join(" — ");
+// A blocked or truncated call produces the same symptom as bad output — no
+// fenced YAML block — so both are named explicitly before falling through to
+// parseCandidate's generic message. See the helpers' comments in
+// lib/scenario-builder.js for why they are shared rather than per-route.
+function blockedOrTruncated(result, raw) {
+  if (result.stopReason === "refusal") {
+    return { ok: false, doc: null, raw, errors: [{ field: "root", message: refusalMessage(result) }] };
+  }
+  if (result.truncated) {
+    return { ok: false, doc: null, raw, errors: [{ field: "root", message: truncationMessage(MAX_TOKENS) }] };
+  }
+  return null;
 }
 
 export async function POST(req) {
@@ -88,15 +93,16 @@ export async function POST(req) {
     let parsed = parseCandidate(first.text);
     let repaired = false;
 
-    // A platform-level content block (stopReason "refusal") means there is
-    // nothing to repair — the model never got to respond, so re-sending its
-    // (empty) turn back for a repair round would just spend another call to
-    // learn nothing. Surface it as its own error instead of falling through
-    // to parseCandidate's generic "no fenced yaml block" message, which
-    // reads identically to a model that simply wrote bad YAML and gives a
-    // caller no signal to stop retrying with this model.
-    if (first.stopReason === "refusal") {
-      parsed = { ok: false, doc: null, raw: parsed.raw, errors: [{ field: "root", message: refusalMessage(first) }] };
+    // Neither a content block nor a truncation is repairable, and both must
+    // skip the repair round for the same reason: there is no formatting
+    // mistake to point out. A truncated response is the trap — unlike a
+    // block it leaves non-empty text (the model opened the fence and ran out
+    // of budget), so it sails past the `first.text.trim()` guard below and
+    // buys a second call that re-emits and truncates again, at double the
+    // cost, reporting "no fenced yaml block" both times.
+    const blocked = blockedOrTruncated(first, parsed.raw);
+    if (blocked) {
+      parsed = blocked;
     } else if (!parsed.ok && first.text.trim()) {
       const repair = await callModel({
         provider,
@@ -118,12 +124,10 @@ export async function POST(req) {
       // Take the repair result either way. If it also failed, its errors
       // describe the model's most recent attempt, which is the more useful
       // thing to put in front of the user than the superseded first one.
-      // A refusal on the repair round gets the same treatment as one on the
-      // first call, for the same reason.
-      parsed =
-        repair.stopReason === "refusal"
-          ? { ok: false, doc: null, raw: parseCandidate(repair.text).raw, errors: [{ field: "root", message: refusalMessage(repair) }] }
-          : parseCandidate(repair.text);
+      // A block or truncation on the repair round is named the same way it
+      // is on the first call, for the same reason.
+      const repairParsed = parseCandidate(repair.text);
+      parsed = blockedOrTruncated(repair, repairParsed.raw) ?? repairParsed;
       repaired = true;
     }
 

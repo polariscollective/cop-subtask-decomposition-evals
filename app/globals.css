@@ -1109,6 +1109,11 @@ details:last-child .gen-score-row {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
-.gen-yaml {
+/* Qualified with the element so it beats .turn-pre's font-family on
+   specificity (0,1,1 vs 0,1,0) rather than on document order — this
+   stylesheet is appended to by more than one workstream, and a `pre` or
+   .turn-pre font rule landing below would otherwise silently revert YAML to
+   a proportional font with no test to catch it. */
+pre.gen-yaml {
   font-family: var(--font-mono);
 }

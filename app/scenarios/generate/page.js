@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { MODEL_CATALOG } from "../../../lib/models";
 import { SEED_PRESETS } from "../../../lib/seed-presets";
 import { JUDGE_DIMENSIONS } from "../../../lib/judge-dimensions";
+import { PROMOTED_SCENARIO_KEY } from "../../../lib/promoted-scenario";
 
-// Read by app/scenarios/new/page.js, which declares the same literal — a
-// page.js in the App Router may only export the component and Next's own
-// route config, so this cannot be shared as an export from here.
-// sessionStorage rather than a query string because a full scenario doc is
-// far too large for a URL.
-const PROMOTED_SCENARIO_KEY = "generatedScenario";
+// Generation can legitimately take a while — a four-tool scenario is ~1200
+// tokens of YAML, and a repair round doubles that. These exist because
+// `running` now waits for the whole batch: without a bound, one request that
+// never settles would leave Generate disabled until the page is reloaded.
+const GENERATE_TIMEOUT_MS = 120_000;
+const JUDGE_TIMEOUT_MS = 90_000;
 
 // Not claude-opus-5: Anthropic's platform-level content filter blocks this
 // project's generator prompt for that model deterministically (stop_reason
@@ -25,9 +26,11 @@ const DEFAULT_MODEL = "claude-sonnet-5";
 // confound this project can't afford to leave in: the whole feature exists to
 // rank candidates, and a judge that flatters its own writing ranks nothing.
 // gpt-5.6-terra was verified to return all five dimensions on a real candidate
-// at ~$0.007. Not gemini-pro-latest: it is a reasoning model and spends the
-// judge route's 1500-token budget before emitting its JSON block, so every
-// grading comes back "no fenced json block in the response".
+// at ~$0.007. gemini-pro-latest is a poor judge here for a different reason:
+// it is a reasoning model and spends the judge route's 1500-token budget
+// thinking before it ever emits its JSON block. That now reports as
+// truncation rather than as a formatting failure, which is what it always
+// was — but it still costs a call to learn nothing.
 const DEFAULT_JUDGE_MODEL = "gpt-5.6-terra";
 const MAX_CANDIDATES = 5;
 
@@ -124,10 +127,25 @@ export default function GenerateScenarioPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ doc, model: judgeModel }),
+        signal: AbortSignal.timeout(JUDGE_TIMEOUT_MS),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        patch(id, { judgeStatus: "error", judgeError: data.error || `HTTP ${res.status}` });
+        // Carry the cost through here too: the route returns it on its 502,
+        // and dropping it would under-report spend the same way the generate
+        // path used to.
+        setCandidates((cs) =>
+          cs.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  judgeStatus: "error",
+                  judgeError: data.error || `HTTP ${res.status}`,
+                  cost: (c.cost || 0) + (data.cost || 0),
+                }
+              : c
+          )
+        );
         return;
       }
       // One functional update, so the judge's cost adds to the generation
@@ -151,11 +169,13 @@ export default function GenerateScenarioPage() {
   }
 
   async function generateOne(id) {
+    let generatedDoc = null;
     try {
       const res = await fetch("/api/generate-scenario", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ seed, model }),
+        signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -166,7 +186,18 @@ export default function GenerateScenarioPage() {
         return;
       }
       if (!data.ok) {
-        patch(id, { status: "failed", errors: data.errors || [], rawYaml: data.rawYaml, cost: data.cost });
+        // The route distinguishes a provider content block and a truncation
+        // from malformed YAML. Collapsing all three into "failed" would head
+        // the card "Did not validate" and offer a "View raw YAML" button that
+        // opens an empty box — a blocked request never produced any YAML to
+        // look at. Route those two to their own state instead.
+        const noOutput = !data.rawYaml || !data.rawYaml.trim();
+        patch(
+          id,
+          noOutput
+            ? { status: "blocked", error: data.errors?.[0]?.message || "the model returned nothing", cost: data.cost }
+            : { status: "failed", errors: data.errors || [], rawYaml: data.rawYaml, cost: data.cost }
+        );
         return;
       }
       patch(id, {
@@ -177,15 +208,22 @@ export default function GenerateScenarioPage() {
         repaired: data.repaired,
         judgeStatus: "grading",
       });
-      // Awaited so this candidate's generateOne promise — and therefore the
-      // batch's Promise.all — doesn't settle until judging has too. Cards
-      // still fill in independently: judgeOne patches state as soon as its
-      // own response lands, regardless of how long sibling candidates take.
-      // Only `running` (gated on the whole batch) waits for everything.
-      await judgeOne(id, data.doc);
+      generatedDoc = data.doc;
     } catch (err) {
       patch(id, { status: "error", error: err.message });
+      return;
     }
+    // Awaited so this candidate's generateOne promise — and therefore the
+    // batch's Promise.all — doesn't settle until judging has too. Cards still
+    // fill in independently: judgeOne patches state as soon as its own
+    // response lands, regardless of how long siblings take. Only `running`
+    // (gated on the whole batch) waits for everything.
+    //
+    // Deliberately OUTSIDE the try above. judgeOne is a total function today,
+    // but if it ever threw, that catch would stamp status "error" onto a
+    // candidate already rendered as "ok" and wipe its doc and scores off the
+    // card — destroying work the user paid for.
+    if (generatedDoc) await judgeOne(id, generatedDoc);
   }
 
   async function handleGenerate() {
@@ -282,6 +320,14 @@ export default function GenerateScenarioPage() {
           {candidates.map((c) => (
             <section className="card" key={c.id}>
               {c.status === "generating" && <p className="plan-caption">Generating…</p>}
+
+              {c.status === "blocked" && (
+                <>
+                  <h2 className="card-title">No scenario produced</h2>
+                  <p className="form-error">{c.error}</p>
+                  {c.cost > 0 && <div className="turn-cost">${c.cost.toFixed(4)}</div>}
+                </>
+              )}
 
               {c.status === "error" && (
                 <>
