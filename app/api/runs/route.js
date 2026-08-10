@@ -25,15 +25,19 @@ export async function GET(req) {
     // owns it, and the client refuses to adopt an identity it doesn't own.
     // The real write-side guard is POST /api/save-run's own ownership check.
     const userEmail = await getSessionEmail();
-    if (!userEmail) {
-      return NextResponse.json({ error: "not signed in" }, { status: 401 });
-    }
     const { data: row, error } = await supabase
       .from("runs")
-      .select("data, style, user_email")
+      .select("data, style, user_email, is_public")
       .eq("id", id)
       .maybeSingle();
     if (error || !row) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    // Anonymous readers exist only because /compare is public. They may read
+    // a transcript, but only of a published run — and an unpublished id gets
+    // the same 404 as a missing one, so the response never confirms that an
+    // id it was handed actually exists.
+    if (!userEmail && !row.is_public) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     // The root style column rides along with the run content: it's the only
@@ -47,7 +51,10 @@ export async function GET(req) {
     return NextResponse.json({
       ...row.data,
       style: row.style ?? row.data?.style ?? null,
-      owned: row.user_email === userEmail,
+      // Guarded on userEmail as well as the comparison: an anonymous caller
+      // reading a batch row whose user_email is null would otherwise come out
+      // as the owner (null === null).
+      owned: Boolean(userEmail) && row.user_email === userEmail,
     });
   }
 
