@@ -41,7 +41,10 @@ export async function GET(req) {
     // per-call argument_style fields can never express on their own. Without
     // it, loading a hybrid run and re-saving silently downgrades it to
     // whichever single style happened to be used last.
-    return NextResponse.json({ ...row.data, style: row.style ?? null });
+    // The column is the source of truth going forward, but batch rows predate
+    // it and carry their style only in the blob — fall back rather than
+    // shadowing a real value with null.
+    return NextResponse.json({ ...row.data, style: row.style ?? row.data?.style ?? null });
   }
 
   // The / page's "Browse saved runs" widget passes mine=true: it's the
@@ -117,7 +120,7 @@ export async function GET(req) {
         // Null for rows saved before this column existed — their per-call
         // argument_style values still live in `data` and are shown by the
         // detail views that read it directly.
-        style: row.style ?? null,
+        style: row.style ?? content.style ?? null,
         mode,
         accepted,
         step_accepted: stepAccepted,

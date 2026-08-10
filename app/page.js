@@ -105,6 +105,11 @@ export default function Home() {
   // Note "all" is a single legitimate value (rotate every round), not hybrid.
   const [planStylesUsed, setPlanStylesUsed] = useState([]);
   const [directStylesUsed, setDirectStylesUsed] = useState([]);
+  // How many executed steps the row we're about to overwrite already holds, so
+  // a save that would drop some can warn first. Continuing the plan clears the
+  // in-memory steps but keeps the run identity, which is how already-saved
+  // transcripts could otherwise be destroyed silently.
+  const [savedStepCount, setSavedStepCount] = useState(0);
 
   // Appends a style to a used-styles list without duplicating it.
   function addStyle(setter) {
@@ -127,7 +132,11 @@ export default function Home() {
       .then((r) => r.json())
       .then((data) => {
         setScenarios(data);
-        if (data.length) setScenarioId(data[0].scenario_id);
+        // Only default an empty selection. A ?id= deep link resolves in
+        // parallel and sets the run's own scenario — whichever request wins
+        // the race, the run's scenario must be the one that sticks, or the
+        // next Save writes the wrong scenario_id onto a real row.
+        if (data.length) setScenarioId((prev) => prev || data[0].scenario_id);
       });
   }, []);
 
@@ -147,6 +156,20 @@ export default function Home() {
   function handleProviderChange(p) {
     setProvider(p);
     setModel(defaultModelFor(p));
+  }
+
+  // A different scenario is a different run. Without this, continuing after
+  // switching scenarios would write the new scenario's id onto a row whose
+  // transcript belongs to the previous one. Not a useEffect on scenarioId:
+  // loadRun sets that too, and would immediately clear the identity it just
+  // adopted.
+  function handleScenarioChange(nextScenarioId) {
+    setScenarioId(nextScenarioId);
+    setPlanRunId(null);
+    setDirectRunId(null);
+    setPlanStylesUsed([]);
+    setDirectStylesUsed([]);
+    setSavedStepCount(0);
   }
 
   async function toggleScenarioDetail() {
@@ -184,6 +207,7 @@ export default function Home() {
     setDirectResult(data.direct_result || null);
     setPlanResult(data.plan_result || null);
     setSteps(data.steps || []);
+    setSavedStepCount((data.steps || []).length);
     setSaveMessage(null);
     setSaveDirectMessage(null);
     setDescription(data.description || "");
@@ -258,6 +282,7 @@ export default function Home() {
     // A fresh ask is a new run — next save inserts a new row.
     setPlanRunId(null);
     setPlanStylesUsed([argumentStyle]);
+    setSavedStepCount(0);
     const res = await fetch("/api/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -292,6 +317,17 @@ export default function Home() {
   }
 
   async function saveRun() {
+    // Continuing the plan clears the in-memory steps while keeping this run's
+    // identity, so saving now would replace already-persisted step transcripts
+    // (real, paid model calls) with a shorter list. Confirm before discarding.
+    if (planRunId && savedStepCount > steps.length) {
+      const discarded = savedStepCount - steps.length;
+      const ok = window.confirm(
+        `This run already has ${savedStepCount} saved step${savedStepCount === 1 ? "" : "s"}. ` +
+          `Saving now keeps ${steps.length} and permanently discards ${discarded}. Continue?`
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     setSaveMessage(null);
     const scenarioTitle = scenarios.find((s) => s.scenario_id === scenarioId)?.title;
@@ -314,6 +350,7 @@ export default function Home() {
       // Hold onto the id so a second save — with or without a continue in
       // between — updates this same row instead of stacking duplicates.
       setPlanRunId(data.id);
+      setSavedStepCount(steps.length);
       setSaveMessage(`Saved (id ${data.id})`);
     } else {
       setSaveMessage(`Save failed: ${data.error}`);
@@ -528,7 +565,7 @@ export default function Home() {
             <select
               id="scenario-select"
               value={scenarioId}
-              onChange={(e) => setScenarioId(e.target.value)}
+              onChange={(e) => handleScenarioChange(e.target.value)}
             >
               {scenarios.map((s) => (
                 <option key={s.scenario_id} value={s.scenario_id}>
