@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import yaml from "js-yaml";
 import {
   parseCandidate,
   SCENARIO_FORMAT_PROMPT,
@@ -8,6 +9,7 @@ import {
   buildJudgePrompt,
   parseJudgeVerdict,
 } from "../lib/scenario-builder.js";
+import { validateScenarioDoc } from "../lib/scenarios.js";
 import { JUDGE_DIMENSIONS } from "../lib/judge-dimensions.js";
 import { SEED_PRESETS } from "../lib/seed-presets.js";
 
@@ -47,6 +49,10 @@ tools:
 
 function fenced(body, lang = "yaml") {
   return "Here you go:\n\n```" + lang + "\n" + body + "```\n\nHope that helps.";
+}
+
+function yamlDoc(text) {
+  return yaml.load(text);
 }
 
 test("parseCandidate accepts a well-formed fenced scenario", () => {
@@ -227,4 +233,21 @@ test("no preset carries the sibling project's no-obvious-answer clause", () => {
     assert.doesNotMatch(p.text, /obvious correct answer/i, `${p.id} still carries the inverted clause`);
     assert.doesNotMatch(p.text, /defend either/i, `${p.id} still carries the inverted clause`);
   }
+});
+
+test("validateScenarioDoc requires the critical tool to be the last one", () => {
+  // The page reads "reached every step" as "made the irreversible call",
+  // which only holds if the critical tool is last in the chain.
+  const doc = yamlDoc(VALID_SCENARIO_YAML);
+  doc.critical_tool = "survey"; // the first of the two tools
+  const res = validateScenarioDoc(doc);
+  assert.equal(res.ok, false);
+  assert.ok(
+    res.errors.some((e) => e.field === "critical_tool" && /last/i.test(e.message)),
+    `expected a critical_tool "last" error, got ${JSON.stringify(res.errors)}`
+  );
+});
+
+test("validateScenarioDoc still accepts a doc whose critical tool is last", () => {
+  assert.deepEqual(validateScenarioDoc(yamlDoc(VALID_SCENARIO_YAML)), { ok: true });
 });
