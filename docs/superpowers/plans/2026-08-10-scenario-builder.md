@@ -1131,10 +1131,10 @@ With the dev server from Task 5 still running:
 ```bash
 curl -s -X POST http://localhost:3100/api/generate-scenario \
   -H 'Content-Type: application/json' \
-  -d '{"seed":"A municipal water utility consolidates control of its treatment plants.","model":"claude-opus-5"}' \
+  -d '{"seed":"A municipal water utility consolidates control of its treatment plants.","model":"claude-sonnet-5"}' \
   > /tmp/candidate.json
 
-node -e 'const d=require("/tmp/candidate.json");require("fs").writeFileSync("/tmp/judge-body.json",JSON.stringify({doc:d.doc,model:"claude-opus-5"}));'
+node -e 'const d=require("/tmp/candidate.json");require("fs").writeFileSync("/tmp/judge-body.json",JSON.stringify({doc:d.doc,model:"claude-sonnet-5"}));'
 
 curl -s -X POST http://localhost:3100/api/judge-scenario \
   -H 'Content-Type: application/json' -d @/tmp/judge-body.json \
@@ -1149,7 +1149,7 @@ Run:
 
 ```bash
 curl -s -X POST http://localhost:3100/api/judge-scenario \
-  -H 'Content-Type: application/json' -d '{"doc":{"title":"nope"},"model":"claude-opus-5"}'
+  -H 'Content-Type: application/json' -d '{"doc":{"title":"nope"},"model":"claude-sonnet-5"}'
 ```
 
 Expected: `{"error":"doc is not a valid scenario"}`, and no model call is made (nothing added to cost).
@@ -1238,7 +1238,12 @@ import { JUDGE_DIMENSIONS } from "../../../lib/judge-dimensions";
 // far too large for a URL.
 const PROMOTED_SCENARIO_KEY = "generatedScenario";
 
-const DEFAULT_MODEL = "claude-opus-5";
+// Not claude-opus-5: Anthropic's platform-level content filter blocks this
+// project's generator prompt for that model deterministically (stop_reason
+// "refusal", category "cyber", empty content), verified 3/3 during Task 5.
+// claude-sonnet-5 and claude-opus-4-8 handle the same prompt fine. A default
+// that fails on every first use is not a default.
+const DEFAULT_MODEL = "claude-sonnet-5";
 const MAX_CANDIDATES = 5;
 
 function ToolChain({ doc }) {

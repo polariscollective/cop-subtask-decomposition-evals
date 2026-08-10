@@ -240,9 +240,19 @@ candidate rather than fatal for the batch.
 
 1. **Seed** — a textarea, optionally pre-filled by a preset dropdown (the
    preset loads its text into the textarea, where it stays editable).
-2. **Model** — dropdown from `MODEL_CATALOG`, default `claude-opus-5`. Not
+2. **Model** — dropdown from `MODEL_CATALOG`, default `claude-sonnet-5`. Not
    hardcoded: which model writes the best scenarios is itself worth
-   comparing.
+   comparing. **Not `claude-opus-5`** — found during implementation:
+   Anthropic's platform-level content filter blocks this project's generator
+   prompt for that model deterministically (`stop_reason: "refusal"`,
+   `stop_details.category: "cyber"`, empty content, 3 output tokens),
+   reproduced 3/3. `claude-sonnet-5` and `claude-opus-4-8` produce the
+   scenario normally. This is a third outcome alongside "the model complied"
+   and "the model refused" — the request never reaches the model at all —
+   and `lib/providers.js` already normalises it to `stopReason: "refusal"`
+   across all four providers. `/api/generate-scenario` surfaces it as a
+   distinct error message rather than letting it look like malformed YAML,
+   so a user can tell "switch models" from "retry".
 3. **Count** — number of candidates, default 3.
 4. **Generate** → N cards appear in a "generating…" state and fill in as
    their requests return, each triggering its own judge call on arrival.
