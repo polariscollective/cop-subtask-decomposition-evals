@@ -115,7 +115,11 @@ export default function Home() {
   // only one was ever used, "hybrid" if the user switched mid-run.
   function styleForSave(stylesUsed) {
     if (stylesUsed.length === 0) return null;
-    return stylesUsed.length > 1 ? "hybrid" : stylesUsed[0];
+    // "hybrid" can appear as a seeded marker when an already-hybrid run was
+    // loaded — once a run is hybrid it stays hybrid, since the individual
+    // styles that made it hybrid aren't recoverable from storage.
+    if (stylesUsed.length > 1 || stylesUsed.includes("hybrid")) return "hybrid";
+    return stylesUsed[0];
   }
 
   useEffect(() => {
@@ -189,7 +193,11 @@ export default function Home() {
     // never both, so only the matching flow's id is set.
     setPlanRunId(data.plan_result ? id : null);
     setDirectRunId(data.direct_result ? id : null);
-    const loadedStyleUsed = data.plan_result?.argument_style || data.direct_result?.argument_style || null;
+    // Prefer the root style column (Step 1 now sends it): it's the only field
+    // that can say "hybrid". Fall back to the nested per-call style for rows
+    // saved before that column existed.
+    const loadedStyleUsed =
+      data.style || data.plan_result?.argument_style || data.direct_result?.argument_style || null;
     const seededStyles = loadedStyleUsed ? [loadedStyleUsed] : [];
     setPlanStylesUsed(data.plan_result ? seededStyles : []);
     setDirectStylesUsed(data.direct_result ? seededStyles : []);
@@ -342,9 +350,9 @@ export default function Home() {
 
   async function runNextStep() {
     if (!planResult?.plan) return;
-    addStyle(setPlanStylesUsed);
     const nextIndex = steps.length;
     if (nextIndex >= planResult.plan.length) return;
+    addStyle(setPlanStylesUsed);
     const stepSpec = planResult.plan[nextIndex];
 
     const priorOutputs = {};

@@ -18,11 +18,16 @@ export async function GET(req) {
   const supabase = getSupabaseClient();
 
   if (id) {
-    const { data: row, error } = await supabase.from("runs").select("data").eq("id", id).single();
+    const { data: row, error } = await supabase.from("runs").select("data, style").eq("id", id).single();
     if (error || !row) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
-    return NextResponse.json(row.data);
+    // The root style column rides along with the run content: it's the only
+    // record that MORE THAN ONE style was used ("hybrid"), which the nested
+    // per-call argument_style fields can never express on their own. Without
+    // it, loading a hybrid run and re-saving silently downgrades it to
+    // whichever single style happened to be used last.
+    return NextResponse.json({ ...row.data, style: row.style ?? null });
   }
 
   // The / page's "Browse saved runs" widget passes mine=true: it's the
