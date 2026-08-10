@@ -24,6 +24,9 @@ export async function POST(req) {
     scenario_id: scenarioId,
     scenario_title: scenarioTitle || null,
     framing,
+    // Recorded in the blob as well as the column: /api/compare reads the
+    // blob's style, the column is what the runs list reads.
+    style: style || null,
     direct_result: directResult || null,
     plan_result: planResult || null,
     steps: steps || null,
@@ -42,6 +45,32 @@ export async function POST(req) {
   // that hands out a runId to save against is GET /api/runs?mine=true,
   // which already returns nothing but the caller's own runs.
   if (runId) {
+    // Read the row first: an overwrite must not erase provenance the manual
+    // flow doesn't model. Batch rows carry run_kind / batch_id /
+    // plan_result_real_attempt, and /api/compare decides inclusion from
+    // data.run_kind — rebuilding the blob from scratch would turn a batch row
+    // into an orphan that still has a batch_id column but has silently
+    // vanished from the comparison view.
+    const { data: existing, error: readError } = await supabase
+      .from("runs")
+      .select("data")
+      .eq("id", runId)
+      .eq("user_email", userEmail)
+      .maybeSingle();
+    if (readError) {
+      return NextResponse.json({ error: readError.message }, { status: 500 });
+    }
+    if (!existing) {
+      // Not ours, or gone. Reporting success here would tell the user their
+      // work was saved when nothing was written.
+      return NextResponse.json({ error: "run not found, or not yours to overwrite" }, { status: 404 });
+    }
+
+    // /api/compare reads the style from the BLOB, not the column, so a run
+    // that has become "hybrid" through manual continuation has to say so in
+    // both places or it keeps aggregating under its original style.
+    const mergedData = { ...existing.data, ...run, style: style || null };
+
     const { error: updateError } = await supabase
       .from("runs")
       .update({
@@ -50,7 +79,7 @@ export async function POST(req) {
         framing,
         style: style || null,
         description: description || null,
-        data: run,
+        data: mergedData,
       })
       .eq("id", runId)
       .eq("user_email", userEmail);

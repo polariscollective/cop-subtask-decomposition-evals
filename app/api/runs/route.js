@@ -18,7 +18,21 @@ export async function GET(req) {
   const supabase = getSupabaseClient();
 
   if (id) {
-    const { data: row, error } = await supabase.from("runs").select("data, style").eq("id", id).single();
+    // Loading a run is how you continue and overwrite it, so it is restricted
+    // to your own runs — /runs links here for every row in the team-wide list,
+    // and without this you could load someone else's run, spend real money
+    // continuing it, and have the save silently write nothing.
+    // Other people's runs stay visible in aggregate through /compare.
+    const userEmail = await getSessionEmail();
+    if (!userEmail) {
+      return NextResponse.json({ error: "not signed in" }, { status: 401 });
+    }
+    const { data: row, error } = await supabase
+      .from("runs")
+      .select("data, style")
+      .eq("id", id)
+      .eq("user_email", userEmail)
+      .maybeSingle();
     if (error || !row) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
