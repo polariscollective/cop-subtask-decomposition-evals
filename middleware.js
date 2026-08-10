@@ -27,7 +27,14 @@ const skipAuthInDev =
 // Note this is per-path, not per-route-tree: adding app/api/runs/foo/route.js
 // would NOT make it public, it would have to be listed here. That is the
 // safer default, and the opposite of what the old matcher did.
-const PUBLIC_PATHS = new Set(["/", "/api/compare", "/api/runs", "/api/scenario-detail"]);
+//
+// The public landing page, and the destination for any unauthenticated page
+// request. Named once and used in both places so the no-loop property is
+// structural rather than a coincidence of two literals agreeing: the
+// redirect target is a member of PUBLIC_PATHS by construction, so it is
+// always let through before the redirect branch can fire.
+const PUBLIC_ROOT = "/";
+const PUBLIC_PATHS = new Set([PUBLIC_ROOT, "/api/compare", "/api/runs", "/api/scenario-detail"]);
 
 // Auth.js's own endpoints are a genuine subtree (/api/auth/signin,
 // /api/auth/callback/google, …), so this one is a prefix test — with the
@@ -59,10 +66,9 @@ export default auth((req) => {
   }
 
   // Unauthenticated page requests land on the public root rather than the
-  // sign-in screen — the banner there is the way in. This cannot loop:
-  // "/" is in PUBLIC_PATHS above, so the redirect target is always let
-  // through before this branch is reached.
-  return NextResponse.redirect(new URL("/", req.nextUrl.origin));
+  // sign-in screen — the banner there is the way in. See PUBLIC_ROOT above
+  // for why this cannot loop.
+  return NextResponse.redirect(new URL(PUBLIC_ROOT, req.nextUrl.origin));
 });
 
 // Four exclusions skip middleware entirely; everything else reaches the
