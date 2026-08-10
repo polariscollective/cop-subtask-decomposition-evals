@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseClient } from "../../../lib/supabase.js";
 import { isAllowedEmail } from "../../../lib/allowed-email.js";
 import { aggregateSamples } from "../../../lib/compare-aggregate.js";
+import { getSessionEmail } from "../../../auth";
 
 // GET() here takes no request-dependent input (no searchParams/cookies/
 // headers), so without this Next.js treats it as static and caches the
@@ -22,7 +23,7 @@ function execTurns(turns) {
 // the full sample list carried along so a caller can show every attempt,
 // not just the best one, and compute a reproducibility rate.
 function toSample(row, attemptStatus) {
-  const { id, data: content, user_email: userEmail, batch_id: batchId } = row;
+  const { id, data: content, user_email: userEmail, batch_id: batchId, is_public: isPublic } = row;
   const base = {
     id,
     pipeline: content.run_kind,
@@ -34,6 +35,7 @@ function toSample(row, attemptStatus) {
     inProgress: attemptStatus(content.batch_id, id) === "running",
     user_email: userEmail,
     batch_id: batchId,
+    isPublic: Boolean(isPublic),
   };
 
   if (content.run_kind === "linear") {
@@ -66,9 +68,27 @@ function toSample(row, attemptStatus) {
   };
 }
 
+// An anonymous visitor's payload must not carry the team's email addresses
+// or internal batch ids — those exist only to drive the signed-in
+// creator/batch filters. isPublic goes too: every sample in an anonymous
+// response is published by construction, so the field would be a constant
+// that only invites someone to trust it as a filter.
+function toPublicSample(sample) {
+  const { user_email, batch_id, isPublic, ...rest } = sample;
+  return rest;
+}
+
 export async function GET() {
   const supabase = getSupabaseClient();
-  const { data: rows, error } = await supabase.from("runs").select("id, data, batch_id, user_email");
+  // The whole public view hangs off this one check. With no session the
+  // filter goes into the query itself rather than being applied afterwards,
+  // so an unpublished run is never even loaded into a response this request
+  // could serialise.
+  const signedIn = Boolean(await getSessionEmail());
+
+  let query = supabase.from("runs").select("id, data, batch_id, user_email, is_public");
+  if (!signedIn) query = query.eq("is_public", true);
+  const { data: rows, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const relevant = (rows || []).filter(
@@ -102,7 +122,9 @@ export async function GET() {
     return attempt?.status ?? null;
   }
 
-  const samples = relevant.map((r) => toSample(r, attemptStatus));
+  const samples = relevant
+    .map((r) => toSample(r, attemptStatus))
+    .map((s) => (signedIn ? s : toPublicSample(s)));
 
   const byCombo = new Map();
   for (const s of samples) {
