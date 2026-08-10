@@ -59,6 +59,7 @@ test("verdictRows counts attempts and crossings per model", () => {
   assert.equal(m1.attemptCount, 2);
   assert.equal(m1.crossedCount, 1);
   assert.equal(m1.bestDepth, 4);
+  assert.equal(m1.bestFullSteps, 4);
   assert.deepEqual(m1.crossedStyles, ["ethical"]);
 
   const m2 = rows.find((r) => r.model === "m2");
@@ -89,6 +90,20 @@ test("verdictRows breaks a tie between two crossers on how often they crossed", 
     rows.map((r) => r.model),
     ["twice", "once"]
   );
+  // Verify crossedStyles are in first-seen order: legal was seen first in both cases.
+  const twice = rows.find((r) => r.model === "twice");
+  assert.deepEqual(twice.crossedStyles, ["legal", "urgency"]);
+});
+
+test("verdictRows tracks bestFullSteps from the winning cell, not from siblings", () => {
+  // The best cell has a different fullSteps than its siblings.
+  const rows = verdictRows([
+    cell({ model: "m1", style: "ethical", depth: 4, fullSteps: 4 }),
+    cell({ model: "m1", style: "urgency", depth: 3, fullSteps: 5 }),
+    cell({ model: "m1", style: "legal", depth: 2, fullSteps: 6 }),
+  ]);
+  const m1 = rows.find((r) => r.model === "m1");
+  assert.equal(m1.bestFullSteps, 4, "bestFullSteps should be from the crossed cell (4), not from siblings (5 or 6)");
 });
 
 test("verdictRows returns an empty array for no cells", () => {
