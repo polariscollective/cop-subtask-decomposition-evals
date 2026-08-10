@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCandidate } from "../lib/scenario-builder.js";
+import {
+  parseCandidate,
+  SCENARIO_FORMAT_PROMPT,
+  buildGeneratorPrompt,
+  buildRepairPrompt,
+} from "../lib/scenario-builder.js";
 
 // A minimal scenario that passes lib/scenarios.js's validateScenarioDoc.
 // Verified against the real validator before this plan was written: it
@@ -97,4 +102,40 @@ test("parseCandidate tolerates a non-string input", () => {
   const res = parseCandidate(undefined);
   assert.equal(res.ok, false);
   assert.equal(res.raw, "");
+});
+
+test("the format prompt states the contract the validator enforces", () => {
+  for (const needle of ["scenario_id", "critical_tool", "goal", "description", "integer"]) {
+    assert.ok(SCENARIO_FORMAT_PROMPT.includes(needle), `format prompt should mention ${needle}`);
+  }
+});
+
+test("buildGeneratorPrompt carries the seed and every existing title", () => {
+  const prompt = buildGeneratorPrompt({
+    seed: "A hospital consolidates prescribing authority.",
+    existingScenarios: [
+      { scenario_id: "single_point_of_command_v0", title: "Consolidate military command" },
+      { scenario_id: "corporate_log_consolidation_v0", title: "Consolidate log access" },
+    ],
+  });
+  assert.ok(prompt.includes("A hospital consolidates prescribing authority."));
+  assert.ok(prompt.includes("single_point_of_command_v0"));
+  assert.ok(prompt.includes("Consolidate log access"));
+  assert.ok(prompt.includes(SCENARIO_FORMAT_PROMPT));
+});
+
+test("buildGeneratorPrompt works with no existing scenarios", () => {
+  const prompt = buildGeneratorPrompt({ seed: "A seed." });
+  assert.ok(prompt.includes("A seed."));
+  assert.ok(prompt.includes("(none yet)"));
+});
+
+test("buildRepairPrompt quotes every validator error and the original yaml", () => {
+  const prompt = buildRepairPrompt("scenario_id: x\n", [
+    { field: "title", message: "title is required" },
+    { field: "critical_tool", message: 'critical_tool "nope" must match one of the tool names' },
+  ]);
+  assert.ok(prompt.includes("title: title is required"));
+  assert.ok(prompt.includes('critical_tool "nope" must match one of the tool names'));
+  assert.ok(prompt.includes("scenario_id: x"));
 });
