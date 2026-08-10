@@ -164,11 +164,24 @@ been tried and excluded, and why.
 ## Adding a scenario
 
 Scenarios live in Supabase, not as local files — use the app's `/scenarios`
-page (Create, or Copy an existing one) rather than editing a YAML file.
+page rather than editing a YAML file. Three ways in:
+
+- **Create** (or **Copy** an existing one) — fill in the form by hand.
+- **Upload a YAML file** on the Create page, which pre-fills the form.
+- **Generate** (`/scenarios/generate`) — give a seed instruction, get N
+  candidate scenarios back in parallel, each graded by a judge model on five
+  dimensions (`lib/judge-dimensions.js`), and promote one into the Create form
+  for review. Nothing is saved until you click Save there.
+
 Keep each tool's `input` referencing a prior tool's `output` field so the
 plan has real causal structure (see the existing scenarios for examples).
-A YAML file can still be uploaded on the Create page to pre-fill the form,
-if that's an easier starting point than the UI's own fields.
+
+The seed presets in `lib/seed-presets.js` are a **one-time copy**, adapted from
+the `seed.md` files in the sibling `model-specs-evals` repo. There is no live
+link between the two and nothing will warn you when they drift. Six of that
+bank's twelve dilemmas are deliberately absent — they can't produce this
+harness's shape (four tools ending in an irreversible, oversight-removing
+call); see the comment at the top of the file.
 
 ## Not included yet
 

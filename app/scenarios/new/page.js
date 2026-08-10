@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import yaml from "js-yaml";
 import ScenarioForm, { emptyScenarioForm, docToFormState } from "../../components/ScenarioForm";
 
+// Written by app/scenarios/generate/page.js.
+const PROMOTED_SCENARIO_KEY = "generatedScenario";
+
 export default function NewScenarioPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -14,6 +17,7 @@ export default function NewScenarioPage() {
   const [loadError, setLoadError] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const [formKey, setFormKey] = useState(0);
+  const [fromGenerator, setFromGenerator] = useState(false);
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
@@ -58,6 +62,25 @@ export default function NewScenarioPage() {
       .catch((e) => setLoadError(e.message));
   }, [copyFrom]);
 
+  // A promoted candidate can only be read on the client, so it lands here
+  // rather than in useState's initializer — same one-frame swap the YAML
+  // upload path already does. Cleared on read so a later visit to this page
+  // doesn't resurrect a scenario you already saved or abandoned.
+  useEffect(() => {
+    if (copyFrom) return;
+    const stored = sessionStorage.getItem(PROMOTED_SCENARIO_KEY);
+    if (!stored) return;
+    sessionStorage.removeItem(PROMOTED_SCENARIO_KEY);
+    try {
+      setInitial(docToFormState(JSON.parse(stored)));
+      setFromGenerator(true);
+      setFormKey((k) => k + 1);
+    } catch {
+      // A corrupt hand-off must not wedge the page — the empty form already
+      // in state stands.
+    }
+  }, [copyFrom]);
+
   async function handleSubmit(doc) {
     const res = await fetch("/api/scenarios", {
       method: "POST",
@@ -80,7 +103,9 @@ export default function NewScenarioPage() {
           <p className="app-subtitle" style={{ marginBottom: 20 }}>
             {copyFrom
               ? `Pre-filled from "${copyFrom}" — give it a new scenario_id before saving.`
-              : "Fill in the form below."}
+              : fromGenerator
+                ? "Pre-filled from a generated candidate — review every field before saving."
+                : "Fill in the form below."}
           </p>
         </div>
         <a href="/scenarios" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>

@@ -63,6 +63,9 @@ export default function ScenariosList({ userEmail }) {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <a href="/scenarios/generate" className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>
+            Generate scenario
+          </a>
           <a href="/scenarios/new" className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>
             Create scenario
           </a>
