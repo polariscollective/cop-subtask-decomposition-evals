@@ -42,24 +42,14 @@ const STYLES = [
   "technical_normalization",
 ];
 
-// A linear run's "0 steps reached" is two different findings that must
-// never look the same: the plan itself was refused (never got to try a
-// step at all) versus the plan WAS accepted and step 1 specifically got
-// refused. Only linear rows carry planAccepted — chained has no separate
-// plan stage, so its 0 is unambiguous already.
-//
-// depth === fullSteps always means genuinely, fully complete (the API
-// route only counts accepted steps toward depth) — so a single "reached
-// every step" marker is enough, no separate case for "reached the last
-// step but got refused there" (that can't happen anymore: a refused step
-// simply doesn't add to depth).
-function cellClass(d) {
+// Returns the cell's state, not a colour ramp step. "plan-refused" and
+// "crossed" are genuinely different findings; everything else is just how far
+// it got, which the bar shows.
+function cellState(d) {
   if (!d) return "na";
   if (d.pipeline === "linear" && d.depth === 0 && d.planAccepted === false) return "plan-refused";
-  if (!d.depth || d.depth === 0) return "d0";
-  const classes = ["d" + Math.min(d.depth, 4)];
-  if (d.depth === d.fullSteps) classes.push("full-reached");
-  return classes.join(" ");
+  if (crossed(d)) return "crossed";
+  return "open";
 }
 
 // Depth is a magnitude, so it is encoded by length, not by hue. The five-step
@@ -489,7 +479,7 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
                               return (
                                 <td key={model} className="cmp-cell-wrap">
                                   <div
-                                    className={`cmp-cell ${cellClass(d)}`}
+                                    className={`cmp-cell ${cellState(d)}`}
                                     tabIndex={0}
                                     role={d?.id ? "button" : undefined}
                                     style={d?.id ? { cursor: "pointer" } : undefined}

@@ -575,11 +575,6 @@ input:focus-visible {
   border-right: 2px solid var(--surface);
 }
 .cmp-ramp span:last-child { border-right: none; }
-.cmp-ramp .cmp-d0 { background: #eef0f2; color: #898781; }
-.cmp-ramp .cmp-d1 { background: #86b6ef; color: #0b0e14; }
-.cmp-ramp .cmp-d2 { background: #3987e5; color: #fff; }
-.cmp-ramp .cmp-d3 { background: #1c5cab; color: #fff; }
-.cmp-ramp .cmp-d4 { background: #0d366b; color: #fff; }
 .cmp-na-swatch {
   width: 14px; height: 14px; border-radius: 3px;
   background: repeating-linear-gradient(45deg, var(--border), var(--border) 2px, transparent 2px, transparent 6px);
@@ -835,17 +830,6 @@ table.cmp-grid th, table.cmp-grid td { padding: 0; }
   background: #eef0f2;
   border: 1px dashed var(--muted);
 }
-/* Reaching every step is the finding this whole dashboard exists to catch
-   — a light red border flags it regardless of which depth color it's
-   sitting on, distinct from the ramp (which only encodes "how far", not
-   "is this the dangerous one"). Deliberately excludes plan-refused above.
-   depth only ever counts accepted steps (see app/api/compare/route.js), so
-   this can only fire on a genuine full completion — no separate case for
-   "reached the last step but got refused there" needed anymore. */
-.cmp-cell.full-reached {
-  box-shadow: 0 0 0 3px #ff1a1a, 0 0 6px 1px rgba(255, 26, 26, 0.85);
-}
-
 .cmp-tooltip {
   position: fixed;
   z-index: 20;
@@ -1199,4 +1183,21 @@ pre.gen-yaml {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+}
+
+.cmp-cell.crossed .cmp-seg.on {
+  background: #ffffff;
+}
+.cmp-cell.crossed .cmp-seg {
+  background: rgba(255, 255, 255, 0.35);
+}
+.cmp-cell.crossed {
+  background: var(--danger);
+  color: #ffffff;
+}
+.cmp-cell.open {
+  background: var(--surface);
+}
+.cmp-crossed-mark {
+  font-weight: 700;
 }
