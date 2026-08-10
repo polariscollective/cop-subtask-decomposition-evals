@@ -231,6 +231,26 @@ export default function CompareGrid({ signedIn }) {
         )}
       </div>
 
+      {!signedIn && (
+        <aside className="cmp-preview-banner" aria-labelledby="preview-banner-title">
+          <div className="cmp-preview-kicker" id="preview-banner-title">
+            Work in progress
+          </div>
+          <p>
+            This is an early preview intended to show the direction this project could take. It currently
+            includes only a few models, a limited selection of argumentation styles, and two example
+            scenarios that have not yet been fully validated. No statistically significant results or
+            conclusions are presented here yet, and several aspects of the results display still need
+            improvement.
+          </p>
+          <p>
+            For feedback—or to request internal access to experiment with scenario generation and
+            evaluation runs—feel free to contact{" "}
+            <a href="mailto:sam@polariscollective.org">sam@polariscollective.org</a>.
+          </p>
+        </aside>
+      )}
+
       {error && (
         <div className="card">
           <p style={{ color: "var(--danger)", margin: 0 }}>Failed to load: {error}</p>
@@ -357,20 +377,15 @@ export default function CompareGrid({ signedIn }) {
             return (
             <section key={scenario.id} className="cmp-scenario">
               {canOpen ? (
-                <h2
-                  className="cmp-scenario-title"
-                  style={{ cursor: "pointer" }}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setDetailScenario({ id: scenario.id, title: scenario.title });
-                    }
-                  }}
-                >
-                  {scenario.title}
+                <h2 className="cmp-scenario-title">
+                  <button
+                    type="button"
+                    className="cmp-scenario-trigger"
+                    onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
+                  >
+                    <span>{scenario.title}</span>
+                    <span className="cmp-scenario-hint">Click here for more details</span>
+                  </button>
                 </h2>
               ) : (
                 <h2 className="cmp-scenario-title">{scenario.title}</h2>

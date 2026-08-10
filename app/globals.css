@@ -618,6 +618,34 @@ input:focus-visible {
   background: var(--surface);
   color: var(--muted);
 }
+.cmp-preview-banner {
+  margin: 18px 0 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+}
+.cmp-preview-kicker {
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cmp-preview-banner p {
+  max-width: 88ch;
+  margin: 0;
+  line-height: 1.6;
+}
+.cmp-preview-banner p + p { margin-top: 8px; }
+.cmp-preview-banner a { color: var(--accent); font-weight: 650; }
+.cmp-preview-banner a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 .cmp-batch-details summary {
   cursor: pointer;
   user-select: none;
@@ -646,6 +674,32 @@ input:focus-visible {
   font-size: 15px;
   font-weight: 650;
   margin: 0 0 10px;
+}
+.cmp-scenario-trigger {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cmp-scenario-hint {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cmp-scenario-trigger:hover .cmp-scenario-hint { text-decoration-thickness: 2px; }
+.cmp-scenario-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 3px;
 }
 .cmp-panels {
   display: grid;
