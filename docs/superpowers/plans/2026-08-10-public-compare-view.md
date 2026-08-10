@@ -13,15 +13,18 @@
 ## Global Constraints
 
 - No new dependencies. No test framework introduced.
-- **The dev server must be started by the human, not from an agent shell.** Ask them to type `!npm run dev` in the Claude Code prompt. Starting it from an agent shell silently injects an invalid `ANTHROPIC_API_KEY`, and the resulting 401s look like model refusals.
+- **Run the dev server on port 3100, never 3000.** A concurrent Claude Code session works in this same repo and may hold 3000. (The usual warning about an agent shell shadowing `ANTHROPIC_API_KEY` does not bite here — nothing this plan verifies calls a model.)
 - **`is_public` is never written by application code.** No route, no script, no UI sets it. It defaults to `false` and is flipped by hand in the Supabase table editor.
 - **An anonymous response must never contain `user_email` or `batch_id`** (the sample-level fields on `/api/compare`). The run blob served by `/api/runs?id=` does contain a `batch_id` — that is a descriptive label like `chained-2026-08-07`, verified to carry no account identifier, and is left alone deliberately.
 - **A private or missing run id returns 404 to an anonymous caller, never 403** — a 403 would confirm the id exists.
 - The `middleware.js` carve-out must match exactly `/compare`, `/api/compare`, `/api/runs`, `/api/scenario-detail` and their sub-paths — nothing else.
 - Tasks 2–4 harden the endpoints **before** Task 5 opens the middleware. Do not reorder: opening the middleware first would expose private runs.
 - Supabase migrations in this project are applied with the Supabase MCP `apply_migration` tool and are **not** tracked as files in the repo (there is no `supabase/` directory and no `.sql` file anywhere). Follow that convention.
-- Verification lever: `getSessionEmail()` returns an email when `LOCAL_AUTHENTICATION_NEEDED=false` in `.env.local`, and `null` when it is `true` (with no real Google login). Flip that value and restart the dev server to switch between the signed-in and anonymous paths. `middleware.js` skips auth entirely outside production, so in dev every route is reachable regardless — middleware behaviour itself can only be verified against a production build (Task 5).
-- Ask the human before editing `.env.local`; they have it open in their editor.
+- **Verification lever — two dev-server profiles.** Never edit `.env.local` (the user has it open); override the variable on the command line instead, which Next.js honours because `@next/env` does not overwrite an already-set variable.
+  - **ANON** — `LOCAL_AUTHENTICATION_EMAIL="" npm run dev -- -p 3100`. `getSessionEmail()` returns `null`, so requests are genuinely anonymous.
+  - **SIGNED-IN** — `npm run dev -- -p 3100`. `getSessionEmail()` returns `sam@polariscollective.org`.
+  Both keep `LOCAL_AUTHENTICATION_NEEDED=false` from `.env.local`, which is what `middleware.js` requires to bypass the gate in dev — so both profiles reach every route and the difference is purely the session. Verified against the live app before this plan started: under ANON, `/api/runs?id=<id>` returns 401 and `/api/compare` returns 200. Note this means **middleware behaviour itself cannot be tested in dev** — it is bypassed in both profiles — so Task 5 verifies it against a production build.
+- **Never edit `.env.local`.** The user has it open in their editor, and the two profiles above make editing it unnecessary.
 
 ## File Structure
 
@@ -322,12 +325,19 @@ update public.runs set is_public = true where id = '<id-from-above>';
 
 - [ ] **Step 7: Ask the human to start the dev server with the anonymous setting**
 
-Ask them to set `LOCAL_AUTHENTICATION_NEEDED=true` in `.env.local` and then type `!npm run dev` in the Claude Code prompt. Do not start it yourself and do not edit `.env.local` without asking — see Global Constraints.
+Start it yourself in the **ANON** profile (see Global Constraints), backgrounded, and wait for `Ready in` to appear in the log before curling:
+
+```bash
+LOCAL_AUTHENTICATION_EMAIL="" npm run dev -- -p 3100 > /tmp/dev-anon.log 2>&1 &
+until grep -q "Ready in" /tmp/dev-anon.log; do sleep 1; done; echo READY
+```
+
+Never edit `.env.local`. Kill the server (`pkill -f "next dev -p 3100"`) before you report.
 
 - [ ] **Step 8: Verify the anonymous response**
 
 ```bash
-curl -s localhost:3000/api/compare | node -e '
+curl -s localhost:3100/api/compare | node -e '
 let raw = ""; process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const combos = JSON.parse(raw);
   const samples = combos.flatMap((c) => c.samples);
@@ -344,10 +354,10 @@ Expected: `combos: 1 samples: 1` then `OK`.
 
 - [ ] **Step 9: Verify the signed-in response is unchanged**
 
-Ask the human to set `LOCAL_AUTHENTICATION_NEEDED=false` in `.env.local` and restart the dev server, then:
+Restart in the **SIGNED-IN** profile (`pkill -f "next dev -p 3100"`, then `npm run dev -- -p 3100`, waiting for `Ready in`), then:
 
 ```bash
-curl -s localhost:3000/api/compare | node -e '
+curl -s localhost:3100/api/compare | node -e '
 let raw = ""; process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const samples = JSON.parse(raw).flatMap((c) => c.samples);
   const published = samples.filter((s) => s.isPublic);
@@ -430,7 +440,7 @@ Replace the whole `if (id) { ... }` block in `app/api/runs/route.js` (currently 
 
 - [ ] **Step 2: Verify anonymously**
 
-Ask the human to set `LOCAL_AUTHENTICATION_NEEDED=true` and restart the dev server. Collect the published id and an unpublished one:
+Restart in the **ANON** profile (see Global Constraints), waiting for `Ready in`. Collect the published id and an unpublished one:
 
 ```bash
 node --env-file=.env.local -e '
@@ -446,9 +456,9 @@ import("./lib/supabase.js").then(async ({ getSupabaseClient }) => {
 Then, substituting the two ids:
 
 ```bash
-echo "published: $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/runs?id=<PUBLIC>')"
-echo "private:   $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/runs?id=<PRIVATE>')"
-echo "list:      $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/runs')"
+echo "published: $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/runs?id=<PUBLIC>')"
+echo "private:   $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/runs?id=<PRIVATE>')"
+echo "list:      $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/runs')"
 ```
 
 Expected:
@@ -462,7 +472,7 @@ list:      401
 - [ ] **Step 3: Verify the published payload carries no account identifier**
 
 ```bash
-curl -s 'localhost:3000/api/runs?id=<PUBLIC>' | node -e '
+curl -s 'localhost:3100/api/runs?id=<PUBLIC>' | node -e '
 let raw = ""; process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const run = JSON.parse(raw);
   if ("user_email" in run) throw new Error("user_email leaked into the anonymous run payload");
@@ -476,12 +486,12 @@ Expected: a key list containing `saved_at`, `scenario_id`, `plan_result`/`direct
 
 - [ ] **Step 4: Verify signed-in behaviour is unchanged**
 
-Ask the human to set `LOCAL_AUTHENTICATION_NEEDED=false` and restart, then:
+Restart in the **SIGNED-IN** profile, then:
 
 ```bash
-echo "published: $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/runs?id=<PUBLIC>')"
-echo "private:   $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/runs?id=<PRIVATE>')"
-echo "list:      $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/runs')"
+echo "published: $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/runs?id=<PUBLIC>')"
+echo "private:   $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/runs?id=<PRIVATE>')"
+echo "list:      $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/runs')"
 ```
 
 Expected: `200`, `200`, `200`.
@@ -552,7 +562,7 @@ export async function GET(req) {
 
 - [ ] **Step 2: Verify anonymously**
 
-Ask the human to set `LOCAL_AUTHENTICATION_NEEDED=true` and restart the dev server. Find the published run's scenario and one with nothing published:
+Restart in the **ANON** profile, waiting for `Ready in`. Find the published run's scenario and one with nothing published:
 
 ```bash
 node --env-file=.env.local -e '
@@ -568,8 +578,8 @@ import("./lib/supabase.js").then(async ({ getSupabaseClient }) => {
 Then, substituting both:
 
 ```bash
-echo "published scenario: $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/scenario-detail?scenarioId=<PUBLISHED_SCENARIO>')"
-echo "other scenario:     $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/scenario-detail?scenarioId=<OTHER_SCENARIO>')"
+echo "published scenario: $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/scenario-detail?scenarioId=<PUBLISHED_SCENARIO>')"
+echo "other scenario:     $(curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/scenario-detail?scenarioId=<OTHER_SCENARIO>')"
 ```
 
 Expected:
@@ -581,7 +591,7 @@ other scenario:     404
 
 - [ ] **Step 3: Verify signed-in behaviour is unchanged**
 
-Ask the human to set `LOCAL_AUTHENTICATION_NEEDED=false` and restart, then re-run both curls from Step 2.
+Restart in the **SIGNED-IN** profile, then re-run both curls from Step 2.
 
 Expected: `200` and `200`.
 
@@ -688,14 +698,14 @@ Expected: `OK`. Note `/compare-internal` and `/comparex` must come out gated —
 Ask the human to stop the dev server, then run a production build and start it (this is the only way to exercise the middleware, since it is bypassed outside production):
 
 ```bash
-npm run build && npm start
+npm run build && npm start -- -p 3100
 ```
 
 Then, in another shell:
 
 ```bash
 for p in /compare /api/compare /runs / /batch /api/save-run; do
-  echo "$p -> $(curl -s -o /dev/null -w '%{http_code}' "localhost:3000$p")"
+  echo "$p -> $(curl -s -o /dev/null -w '%{http_code}' "localhost:3100$p")"
 done
 ```
 
@@ -717,7 +727,7 @@ Expected:
 With the production server still running:
 
 ```bash
-curl -s localhost:3000/compare | grep -o "Viewing public results" | head -1
+curl -s localhost:3100/compare | grep -o "Viewing public results" | head -1
 ```
 
 Expected: `Viewing public results`
@@ -782,15 +792,15 @@ export default async function ComparePage() {
 
 - [ ] **Step 4: Verify the page still renders identically**
 
-With the dev server running and `LOCAL_AUTHENTICATION_NEEDED=false`:
+With the dev server running in the **SIGNED-IN** profile:
 
 ```bash
-curl -s localhost:3000/compare | grep -c "Plan+execute vs. chained"
+curl -s localhost:3100/compare | grep -c "Plan+execute vs. chained"
 ```
 
 Expected: `1`
 
-Then ask the human to open `http://localhost:3000/compare` in a browser and confirm the grid, legend, creator pills, batch picker, stats, tooltips, cell transcripts and scenario modal all behave exactly as before.
+Then ask the human to open `http://localhost:3100/compare` in a browser and confirm the grid, legend, creator pills, batch picker, stats, tooltips, cell transcripts and scenario modal all behave exactly as before.
 
 - [ ] **Step 5: Commit**
 
@@ -946,7 +956,7 @@ Append to the compare-view block in `app/globals.css`, directly after the `.cmp-
 
 - [ ] **Step 7: Verify the signed-out view**
 
-Ask the human to set `LOCAL_AUTHENTICATION_NEEDED=true`, restart the dev server, and open `http://localhost:3000/compare`. Confirm:
+Restart in the **ANON** profile, then ask the human to open `http://localhost:3100/compare` in a browser. Confirm:
 
 - the top bar reads "Viewing public results" with a working Sign in link
 - there is no "Runs table ↗" and no "← Back to dashboard"
@@ -963,7 +973,7 @@ pills) lives inside the page's `{rows && (…)}` block and only exists after the
 client fetch resolves, so those are the browser checks above, not this one.
 
 ```bash
-curl -s localhost:3000/compare | node -e '
+curl -s localhost:3100/compare | node -e '
 let raw = ""; process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const must = ["Viewing public results", "Plan+execute vs. chained"];
   const mustNot = ["Back to dashboard", "Runs table"];
@@ -977,14 +987,14 @@ Expected: `OK`
 
 - [ ] **Step 8: Verify the signed-in view**
 
-Ask the human to set `LOCAL_AUTHENTICATION_NEEDED=false`, restart, and reload `/compare`. Confirm the page is identical to before this feature, plus a `Public only (1)` checkbox. Check it and confirm the grid collapses to the same single populated cell the signed-out view showed; uncheck it and confirm the full grid returns.
+Restart in the **SIGNED-IN** profile, then ask the human to reload `/compare`. Confirm the page is identical to before this feature, plus a `Public only (1)` checkbox. Check it and confirm the grid collapses to the same single populated cell the signed-out view showed; uncheck it and confirm the full grid returns.
 
 Same caveat as the previous step — the checkbox itself is only in the DOM
 after the fetch resolves, so the automated check covers the server-rendered
 part and the browser covers the rest:
 
 ```bash
-curl -s localhost:3000/compare | node -e '
+curl -s localhost:3100/compare | node -e '
 let raw = ""; process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const must = ["Back to dashboard", "Runs table", "Signed in as"];
   for (const s of must) if (!raw.includes(s)) throw new Error("missing: " + s);
@@ -1047,16 +1057,16 @@ themselves; `middleware.js` carves them out of the sign-in gate on that basis.
 
 - [ ] **Step 2: Run the spec's verification checklist**
 
-Ask the human to run a production build (`npm run build && npm start`) with exactly one run published, and walk the list. Record the result of each item.
+Ask the human to run a production build (`npm run build && npm start -- -p 3100`) with exactly one run published, and walk the list. Record the result of each item.
 
 | # | Check | Expected |
 |---|---|---|
 | 1 | Anonymous `/compare` | loads, no redirect |
 | 2 | Grid contents | only the published run's combo has data |
-| 3 | `curl -s localhost:3000/api/compare \| grep -c '@'` | `0` |
+| 3 | `curl -s localhost:3100/api/compare \| grep -c '@'` | `0` |
 | 4 | Cell click / scenario title click | transcript opens; scenario spec opens |
-| 5 | `curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/runs?id=<PRIVATE>'` | `404` |
-| 6 | `curl -s -o /dev/null -w '%{http_code}' 'localhost:3000/api/scenario-detail?scenarioId=<OTHER>'` | `404` |
+| 5 | `curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/runs?id=<PRIVATE>'` | `404` |
+| 6 | `curl -s -o /dev/null -w '%{http_code}' 'localhost:3100/api/scenario-detail?scenarioId=<OTHER>'` | `404` |
 | 7 | `/`, `/runs`, `/batch`, `/scenarios` | all redirect to sign-in |
 | 8 | Signed in, "public only" unchecked | identical to before the feature |
 | 9 | Signed in, "public only" checked | matches row 2's view |
