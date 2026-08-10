@@ -49,7 +49,8 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000
+Open http://localhost:3000/dashboard (the site root is now the public compare
+view — see "The public compare view" below)
 
 - `POST /api/plan`: asks the model to decompose the scenario's goal into a
   sequential tool-call plan, using either the "real" or "test" framing
@@ -138,7 +139,7 @@ permanent.
 Output: a console table plus `runs/batches/<batch_id>/summary.csv` — the one
 local file the batch runner still writes — with one row per
 `(model, scenario, framing, style)`: accepted or not, at which turn, cost,
-and the run's id, which opens it in the dashboard at `/?id=<id>`.
+and the run's id, which opens it in the dashboard at `/dashboard?id=<id>`.
 
 Design notes (turn-budget math, state file schema, cost estimation
 approach) are in
@@ -148,7 +149,7 @@ approach) are in
 
 `lib/models.js`'s `MODEL_CATALOG` is the full list of callable models
 (Anthropic, OpenAI, xAI, Google) with pricing — it's what both the manual
-dashboard's model dropdown and `/compare`'s "hide models with no data"
+dashboard's model dropdown and `/`'s "hide models with no data"
 toggle read from. Run `node scripts/smoke-test-providers.js` to verify every
 model in it still actually works (one cheap text call + one tool-calling
 call each, against whichever `*_API_KEY` are set in `.env.local`).
@@ -185,10 +186,10 @@ if that's an easier starting point than the UI's own fields.
 
 The app is gated behind Google sign-in — only accounts in `ALLOWED_EMAILS`
 (exact match) or with a domain in `ALLOWED_DOMAINS` can reach it, with one
-exception: `/compare` is public (see below). Everyone who's allowed in shares
+exception: `/` is public (see below). Everyone who's allowed in shares
 the `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` set in the environment; there's no
 per-user key. This also determines whose saved runs are visible in the
-`/compare` model-comparison view — runs from any other account are excluded
+`/` model-comparison view — runs from any other account are excluded
 there.
 
 To set up a new environment (local or a new Vercel project):
@@ -212,8 +213,12 @@ session and there's no other way to know who to attribute the runs to.
 
 ### The public compare view
 
-`/compare` is readable without signing in, but only shows runs whose
-`is_public` column is `true`. Nothing in the app ever writes that column —
+The site root `/` is the public compare view: readable without signing in,
+but showing only runs whose `is_public` column is `true`. It is the only
+page reachable signed out — every other page redirects there rather than to
+a sign-in screen — and the manual runner it replaced now lives at
+`/dashboard`. The old `/compare` path permanently redirects to `/`. Nothing
+in the app ever writes the `is_public` column —
 publish a run by flipping it by hand in the Supabase table editor, or with:
 
 ```sql
@@ -237,4 +242,5 @@ picker and nav links to the rest of the app stay visible regardless, since
 those are gated on being signed in, not on the checkbox. The three endpoints
 the public page reads
 (`/api/compare`, `/api/runs?id=`, `/api/scenario-detail`) each enforce this
-themselves; `middleware.js` carves them out of the sign-in gate on that basis.
+themselves; `middleware.js` lists them, and `/`, in its `PUBLIC_PATHS` set on
+that basis.

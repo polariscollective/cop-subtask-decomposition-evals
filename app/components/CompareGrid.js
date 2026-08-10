@@ -224,7 +224,7 @@ export default function CompareGrid({ signedIn }) {
             <a href="/runs" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
               Runs table ↗
             </a>
-            <a href="/" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+            <a href="/dashboard" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
               ← Back to dashboard
             </a>
           </div>

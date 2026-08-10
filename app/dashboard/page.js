@@ -556,7 +556,7 @@ export default function Home() {
           <a className="btn btn-ghost" href="/runs">
             Open full runs table ↗
           </a>
-          <a className="btn btn-ghost" href="/compare">
+          <a className="btn btn-ghost" href="/">
             Model comparison ↗
           </a>
           <a className="btn btn-ghost" href="/batch">

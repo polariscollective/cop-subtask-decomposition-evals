@@ -40,7 +40,7 @@ export default async function RootLayout({ children }) {
           // member who lands on the public view.
           <div className="auth-bar">
             <span>Viewing public results</span>
-            <a className="btn btn-ghost" href="/api/auth/signin?callbackUrl=%2Fcompare">
+            <a className="btn btn-ghost" href="/api/auth/signin?callbackUrl=%2F">
               Sign in
             </a>
           </div>

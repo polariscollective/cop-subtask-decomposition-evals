@@ -66,7 +66,7 @@ export default function ScenariosList({ userEmail }) {
           <a href="/scenarios/new" className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>
             Create scenario
           </a>
-          <a href="/" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+          <a href="/dashboard" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
             ← Back to dashboard
           </a>
         </div>

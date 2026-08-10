@@ -156,10 +156,10 @@ export default function RunsExplorer() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <a href="/compare" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+          <a href="/" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
             Model comparison ↗
           </a>
-          <a href="/" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+          <a href="/dashboard" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
             ← Back to dashboard
           </a>
         </div>
@@ -270,7 +270,7 @@ export default function RunsExplorer() {
                       </td>
                       <td>
                         {r.owned ? (
-                          <a className="btn btn-ghost" href={`/?id=${encodeURIComponent(r.id)}`}>
+                          <a className="btn btn-ghost" href={`/dashboard?id=${encodeURIComponent(r.id)}`}>
                             Open
                           </a>
                         ) : (
