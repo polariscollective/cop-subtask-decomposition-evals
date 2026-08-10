@@ -555,7 +555,13 @@ input:focus-visible {
 }
 
 /* Compare page (plan+execute vs chained heatmaps) */
-.cmp-legend {
+/* Was .cmp-legend; the JSX section that carries this class was renamed to
+   cmp-controls when the legend card's explanatory blocks were deleted (the
+   surviving toggles/pills/stats moved in under a new name). This rule is
+   renamed to match — without it the section's children (the key, the two
+   hide-empty toggles, the public/creator/batch controls, the stats line)
+   lose the flex-wrap row layout entirely and stack one per line. */
+.cmp-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -566,19 +572,6 @@ input:focus-visible {
   color: var(--ink-2);
 }
 .cmp-legend-group { display: flex; align-items: center; gap: 8px; }
-.cmp-ramp { display: flex; }
-.cmp-ramp span {
-  width: 22px; height: 15px;
-  display: flex; align-items: center; justify-content: center;
-  font-family: ui-monospace, "SF Mono", monospace;
-  font-size: 9.5px;
-  border-right: 2px solid var(--surface);
-}
-.cmp-ramp span:last-child { border-right: none; }
-.cmp-na-swatch {
-  width: 14px; height: 14px; border-radius: 3px;
-  background: repeating-linear-gradient(45deg, var(--border), var(--border) 2px, transparent 2px, transparent 6px);
-}
 .cmp-stats {
   display: flex; gap: 20px; margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap;
 }
@@ -776,20 +769,6 @@ table.cmp-grid th, table.cmp-grid td { padding: 0; }
   background: var(--warn);
   color: #fff;
   opacity: 1;
-}
-/* Legend/tooltip render these on the page background, not a cell — give
-   the "real" tag a visible outline there instead of relying on a dark cell
-   backdrop for contrast. */
-.cmp-legend-group .cmp-framing-letter.cmp-framing-real,
-.cmp-tt-row .cmp-framing-letter.cmp-framing-real {
-  background: var(--border);
-  color: var(--ink-2);
-  opacity: 1;
-}
-.cmp-plan-refused-swatch {
-  width: 14px; height: 14px; border-radius: 3px;
-  background: #eef0f2;
-  border: 1px dashed var(--muted);
 }
 .cmp-tooltip {
   position: fixed;
@@ -1170,17 +1149,15 @@ pre.gen-yaml {
   flex-direction: column;
   gap: 2px;
 }
-/* Named cmp-pipe-cell, deliberately not cmp-cell: the old .cmp-cell rule at
-   line ~741 (flex-direction: column, a fixed 42px height, position) was
-   written for the pre-restructure single-line cell and is still used
-   elsewhere. Reusing that class name here let its column direction and
-   fixed height silently combine with this rule's padding/border under
-   border-box sizing, pushing content below the coloured block. A distinct
-   class avoids the collision outright instead of trying to out-specificity
-   it. Because the state classes (na/plan-refused/crossed/open, from
-   cellState) are written as .cmp-cell.<state> elsewhere, this rename means
-   duplicating the ones this component actually needs below rather than
-   editing those pre-existing rules in place. */
+/* Named cmp-pipe-cell, deliberately not cmp-cell: an earlier, differently-
+   shaped .cmp-cell rule (flex-direction: column, a fixed 42px height,
+   position) was written for the pre-restructure single-line cell and, when
+   this class briefly reused that name, its column direction and fixed
+   height silently combined with this rule's padding/border under border-box
+   sizing, pushing content below the coloured block. A distinct class
+   avoided the collision outright. That old .cmp-cell family (including its
+   na/plan-refused/crossed/open state variants) has since been deleted
+   entirely — the state classes below are the only ones that exist now. */
 .cmp-pipe-cell {
   display: flex;
   flex-direction: column;
@@ -1227,10 +1204,9 @@ pre.gen-yaml {
   font-size: 10.5px;
   font-weight: 500;
 }
-/* Mirrors the pre-existing .cmp-cell.plan-refused treatment (line ~823) so
-   the "plan itself refused" state — a different finding from ordinary lack
-   of progress — still reads as gray/dashed rather than looking like every
-   other low-depth cell. */
+/* The "plan itself refused" state — a different finding from ordinary lack
+   of progress — reads as gray/dashed rather than looking like every other
+   low-depth cell. */
 .cmp-pipe-cell.plan-refused {
   background: #eef0f2;
   border: 1px dashed var(--muted);
@@ -1240,8 +1216,8 @@ pre.gen-yaml {
   font-size: 10.5px;
   font-weight: 600;
 }
-/* Mirrors the pre-existing .cmp-cell.crossed/.cmp-cell.open treatment
-   (line ~1188) so crossing the critical step still reads red here too. */
+/* Crossing the critical step reads red; not crossed (but not plan-refused
+   or na either) gets no fill, just the surface. */
 .cmp-pipe-cell.crossed {
   background: var(--danger);
   color: #ffffff;
