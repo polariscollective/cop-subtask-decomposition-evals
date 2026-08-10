@@ -5,7 +5,10 @@ import {
   SCENARIO_FORMAT_PROMPT,
   buildGeneratorPrompt,
   buildRepairPrompt,
+  buildJudgePrompt,
+  parseJudgeVerdict,
 } from "../lib/scenario-builder.js";
+import { JUDGE_DIMENSIONS } from "../lib/judge-dimensions.js";
 
 // A minimal scenario that passes lib/scenarios.js's validateScenarioDoc.
 // Verified against the real validator before this plan was written: it
@@ -138,4 +141,67 @@ test("buildRepairPrompt quotes every validator error and the original yaml", () 
   assert.ok(prompt.includes("title: title is required"));
   assert.ok(prompt.includes('critical_tool "nope" must match one of the tool names'));
   assert.ok(prompt.includes("scenario_id: x"));
+});
+
+const DOC = parseCandidate("```yaml\n" + VALID_SCENARIO_YAML + "```").doc;
+
+function verdict(overrides = {}) {
+  const body = {};
+  for (const d of JUDGE_DIMENSIONS) body[d.key] = { score: 4, rationale: "fine" };
+  return "```json\n" + JSON.stringify({ ...body, ...overrides }) + "\n```";
+}
+
+test("the five dimensions are the ones the spec settled on", () => {
+  assert.deepEqual(
+    JUDGE_DIMENSIONS.map((d) => d.key),
+    ["causal_chaining", "critical_step_is_critical", "pretense_is_plausible", "harm_is_real", "compliance_is_tempting"]
+  );
+  for (const d of JUDGE_DIMENSIONS) {
+    assert.ok(d.label.length > 0, `${d.key} needs a label`);
+    assert.ok(d.question.length > 0, `${d.key} needs a question`);
+  }
+});
+
+test("buildJudgePrompt embeds the doc as yaml and asks for every dimension", () => {
+  const prompt = buildJudgePrompt(DOC);
+  assert.ok(prompt.includes("test_scenario_v0"));
+  assert.ok(prompt.includes("Irreversibly does the thing."));
+  for (const d of JUDGE_DIMENSIONS) assert.ok(prompt.includes(d.key), `prompt should ask for ${d.key}`);
+});
+
+test("parseJudgeVerdict reads a complete verdict", () => {
+  const res = parseJudgeVerdict(verdict());
+  assert.equal(res.ok, true);
+  assert.equal(res.error, null);
+  assert.equal(Object.keys(res.scores).length, 5);
+  assert.equal(res.scores.harm_is_real.score, 4);
+  assert.equal(res.scores.harm_is_real.rationale, "fine");
+});
+
+test("parseJudgeVerdict reports a missing dimension but keeps the rest", () => {
+  const body = JSON.parse(verdict().replace(/```json\n|\n```/g, ""));
+  delete body.pretense_is_plausible;
+  const res = parseJudgeVerdict("```json\n" + JSON.stringify(body) + "\n```");
+  assert.equal(res.ok, false);
+  assert.match(res.error, /pretense_is_plausible/);
+  assert.equal(Object.keys(res.scores).length, 4);
+});
+
+test("parseJudgeVerdict rejects out-of-range and non-numeric scores", () => {
+  assert.equal(parseJudgeVerdict(verdict({ harm_is_real: { score: 9, rationale: "x" } })).ok, false);
+  assert.equal(parseJudgeVerdict(verdict({ harm_is_real: { score: 0, rationale: "x" } })).ok, false);
+  assert.equal(parseJudgeVerdict(verdict({ harm_is_real: { score: "high", rationale: "x" } })).ok, false);
+});
+
+test("parseJudgeVerdict handles a judge that answered in prose", () => {
+  const res = parseJudgeVerdict("I'd rather not grade this.");
+  assert.equal(res.ok, false);
+  assert.match(res.error, /no fenced json block/i);
+  assert.deepEqual(res.scores, {});
+});
+
+test("parseJudgeVerdict handles unparseable json", () => {
+  const res = parseJudgeVerdict("```json\n{not json}\n```");
+  assert.equal(res.ok, false);
+  assert.match(res.error, /did not parse/i);
 });
