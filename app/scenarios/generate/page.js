@@ -159,7 +159,10 @@ export default function GenerateScenarioPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        patch(id, { status: "error", error: data.error || `HTTP ${res.status}` });
+        // The 502 path deliberately still returns cost — a first model call
+        // can spend money before the failure that follows it — so carry it
+        // through instead of dropping it on the floor.
+        patch(id, { status: "error", error: data.error || `HTTP ${res.status}`, cost: data.cost });
         return;
       }
       if (!data.ok) {
@@ -174,7 +177,12 @@ export default function GenerateScenarioPage() {
         repaired: data.repaired,
         judgeStatus: "grading",
       });
-      judgeOne(id, data.doc);
+      // Awaited so this candidate's generateOne promise — and therefore the
+      // batch's Promise.all — doesn't settle until judging has too. Cards
+      // still fill in independently: judgeOne patches state as soon as its
+      // own response lands, regardless of how long sibling candidates take.
+      // Only `running` (gated on the whole batch) waits for everything.
+      await judgeOne(id, data.doc);
     } catch (err) {
       patch(id, { status: "error", error: err.message });
     }
@@ -275,7 +283,12 @@ export default function GenerateScenarioPage() {
             <section className="card" key={c.id}>
               {c.status === "generating" && <p className="plan-caption">Generating…</p>}
 
-              {c.status === "error" && <p className="form-error">Request failed: {c.error}</p>}
+              {c.status === "error" && (
+                <>
+                  <p className="form-error">Request failed: {c.error}</p>
+                  {c.cost > 0 && <span className="turn-cost">${c.cost.toFixed(4)}</span>}
+                </>
+              )}
 
               {c.status === "failed" && (
                 <>
@@ -287,10 +300,13 @@ export default function GenerateScenarioPage() {
                       </li>
                     ))}
                   </ul>
-                  <button className="btn btn-ghost" onClick={() => setShowYamlFor(showYamlFor === c.id ? null : c.id)}>
-                    {showYamlFor === c.id ? "Hide raw YAML" : "View raw YAML"}
-                  </button>
-                  {showYamlFor === c.id && <pre className="mono">{c.rawYaml}</pre>}
+                  <div className="action-row">
+                    <button className="btn btn-ghost" onClick={() => setShowYamlFor(showYamlFor === c.id ? null : c.id)}>
+                      {showYamlFor === c.id ? "Hide raw YAML" : "View raw YAML"}
+                    </button>
+                    {c.cost > 0 && <span className="turn-cost">${c.cost.toFixed(4)}</span>}
+                  </div>
+                  {showYamlFor === c.id && <pre className="turn-pre">{c.rawYaml}</pre>}
                 </>
               )}
 
@@ -309,7 +325,7 @@ export default function GenerateScenarioPage() {
                     </button>
                     {c.cost > 0 && <span className="turn-cost">${c.cost.toFixed(4)}</span>}
                   </div>
-                  {showYamlFor === c.id && <pre className="mono">{c.rawYaml}</pre>}
+                  {showYamlFor === c.id && <pre className="turn-pre">{c.rawYaml}</pre>}
                 </>
               )}
             </section>
