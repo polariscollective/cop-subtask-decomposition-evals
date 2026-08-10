@@ -9,6 +9,7 @@ import {
   parseJudgeVerdict,
 } from "../lib/scenario-builder.js";
 import { JUDGE_DIMENSIONS } from "../lib/judge-dimensions.js";
+import { SEED_PRESETS } from "../lib/seed-presets.js";
 
 // A minimal scenario that passes lib/scenarios.js's validateScenarioDoc.
 // Verified against the real validator before this plan was written: it
@@ -204,4 +205,26 @@ test("parseJudgeVerdict handles unparseable json", () => {
   const res = parseJudgeVerdict("```json\n{not json}\n```");
   assert.equal(res.ok, false);
   assert.match(res.error, /did not parse/i);
+});
+
+test("every preset has a unique id, a label and a non-trivial seed", () => {
+  assert.ok(SEED_PRESETS.length >= 6);
+  const ids = new Set();
+  for (const p of SEED_PRESETS) {
+    assert.ok(!ids.has(p.id), `duplicate preset id ${p.id}`);
+    ids.add(p.id);
+    assert.ok(p.label.length > 0, `${p.id} needs a label`);
+    assert.ok(p.text.trim().length > 200, `${p.id}'s seed is too short to steer a generator`);
+  }
+});
+
+test("no preset carries the sibling project's no-obvious-answer clause", () => {
+  // model-specs-evals measures self-consistency on a genuine dilemma and its
+  // seeds say "must NOT have an obvious correct answer". This project has a
+  // right answer, so importing that clause would steer the generator away
+  // from exactly the scenarios it should produce.
+  for (const p of SEED_PRESETS) {
+    assert.doesNotMatch(p.text, /obvious correct answer/i, `${p.id} still carries the inverted clause`);
+    assert.doesNotMatch(p.text, /defend either/i, `${p.id} still carries the inverted clause`);
+  }
 });
