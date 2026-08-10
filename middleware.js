@@ -5,7 +5,17 @@ import { auth } from "./auth";
 // reachable (including by tools that can't drive an OAuth flow) without
 // ever weakening anything in production — this never runs when
 // NODE_ENV === "production".
-const skipAuthInDev = process.env.NODE_ENV !== "production";
+//
+// Gated on the SAME two conditions as auth.js's getSessionEmail(), so the
+// app has exactly one opt-in switch rather than two independently-armed
+// ones. Requiring NODE_ENV alone would fire even when the operator has
+// deliberately left LOCAL_AUTHENTICATION_NEEDED unset — and middleware is
+// the only session check five routes have (ask-direct, plan, execute-step,
+// compare, batch/status), three of which spend real money on the org's
+// provider keys. `next dev` binds every interface, so that combination
+// exposes them on any shared network.
+const skipAuthInDev =
+  process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTHENTICATION_NEEDED === "false";
 
 export default auth((req) => {
   if (skipAuthInDev) return NextResponse.next();
