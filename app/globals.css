@@ -1055,3 +1055,6 @@ details:last-child .gen-score-row {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+.gen-yaml {
+  font-family: var(--font-mono);
+}

@@ -306,7 +306,7 @@ export default function GenerateScenarioPage() {
                     </button>
                     {c.cost > 0 && <span className="turn-cost">${c.cost.toFixed(4)}</span>}
                   </div>
-                  {showYamlFor === c.id && <pre className="turn-pre">{c.rawYaml}</pre>}
+                  {showYamlFor === c.id && <pre className="turn-pre gen-yaml">{c.rawYaml}</pre>}
                 </>
               )}
 
@@ -325,7 +325,7 @@ export default function GenerateScenarioPage() {
                     </button>
                     {c.cost > 0 && <span className="turn-cost">${c.cost.toFixed(4)}</span>}
                   </div>
-                  {showYamlFor === c.id && <pre className="turn-pre">{c.rawYaml}</pre>}
+                  {showYamlFor === c.id && <pre className="turn-pre gen-yaml">{c.rawYaml}</pre>}
                 </>
               )}
             </section>
