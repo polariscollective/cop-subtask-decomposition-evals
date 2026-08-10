@@ -610,6 +610,14 @@ input:focus-visible {
   border-color: var(--accent);
   color: var(--accent-ink);
 }
+.cmp-public-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
 .cmp-batch-details summary {
   cursor: pointer;
   user-select: none;

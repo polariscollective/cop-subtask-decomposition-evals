@@ -78,6 +78,9 @@ export default function CompareGrid({ signedIn }) {
   // have; an explicit empty-result selection must show an empty grid.
   const [selectedCreators, setSelectedCreators] = useState(new Set());
   const [selectedBatches, setSelectedBatches] = useState(new Set());
+  // Off by default: signing in should change as little as possible about the
+  // page. Checking it reproduces exactly what a signed-out visitor sees.
+  const [publicOnly, setPublicOnly] = useState(false);
 
   useEffect(() => {
     fetch("/api/compare")
@@ -109,6 +112,16 @@ export default function CompareGrid({ signedIn }) {
     return [...set].sort();
   }, [rows, selectedCreators]);
 
+  // Deliberately counted over the whole loaded dataset rather than the
+  // current creator/batch selection: it labels the checkbox, and a number
+  // that moved as other filters changed would read as a result rather than
+  // as "this is how much has been published so far".
+  const publicCount = useMemo(() => {
+    let n = 0;
+    for (const r of rows || []) for (const s of r.samples) if (s.isPublic) n++;
+    return n;
+  }, [rows]);
+
   // Re-aggregates every combo's samples down to just the active
   // creator/batch selection (empty selection = everyone / every batch),
   // using the exact same best-of-N math the API applies server-side —
@@ -124,12 +137,13 @@ export default function CompareGrid({ signedIn }) {
         const samples = combo.samples.filter(
           (s) =>
             (selectedCreators.size === 0 || selectedCreators.has(s.user_email)) &&
-            (selectedBatches.size === 0 || selectedBatches.has(s.batch_id))
+            (selectedBatches.size === 0 || selectedBatches.has(s.batch_id)) &&
+            (!publicOnly || s.isPublic)
         );
         return aggregateSamples(samples);
       })
       .filter(Boolean);
-  }, [rows, selectedCreators, selectedBatches]);
+  }, [rows, selectedCreators, selectedBatches, publicOnly]);
 
   const index = useMemo(() => {
     const m = new Map();
@@ -205,14 +219,16 @@ export default function CompareGrid({ signedIn }) {
             call it made.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <a href="/runs" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
-            Runs table ↗
-          </a>
-          <a href="/" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
-            ← Back to dashboard
-          </a>
-        </div>
+        {signedIn && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <a href="/runs" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+              Runs table ↗
+            </a>
+            <a href="/" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+              ← Back to dashboard
+            </a>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -264,7 +280,24 @@ export default function CompareGrid({ signedIn }) {
               <input type="checkbox" checked={hideEmptyModels} onChange={(e) => setHideEmptyModels(e.target.checked)} />
               Hide models with no data ({emptyModels.size})
             </label>
-            {availableCreators.length > 0 && (
+            {signedIn ? (
+              <label className="cmp-legend-group cmp-toggle">
+                <input
+                  type="checkbox"
+                  checked={publicOnly}
+                  onChange={(e) => {
+                    setPublicOnly(e.target.checked);
+                    setModalCombo(null);
+                  }}
+                />
+                Public only ({publicCount})
+              </label>
+            ) : (
+              <div className="cmp-legend-group">
+                <span className="cmp-public-chip">Public runs only</span>
+              </div>
+            )}
+            {signedIn && availableCreators.length > 0 && (
               <div className="cmp-legend-group">
                 <span>Creator</span>
                 {availableCreators.map((email) => (
@@ -280,7 +313,7 @@ export default function CompareGrid({ signedIn }) {
                 ))}
               </div>
             )}
-            {availableBatches.length > 0 && (
+            {signedIn && availableBatches.length > 0 && (
               <details className="cmp-legend-group cmp-batch-details">
                 <summary className="cmp-toggle">
                   Batch ({selectedBatches.size || "all"} of {availableBatches.length})
