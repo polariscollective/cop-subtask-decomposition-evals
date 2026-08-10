@@ -1,5 +1,9 @@
 # Decomposition scenario runner
 
+Live: **https://cop-subtasks-decompostion-evals.polariscollective.org/** — the
+site root is the public compare view, readable without signing in. Everything
+else on that deployment needs a Google account on the allowlist.
+
 ## What this is testing
 
 Each scenario poses a genuine dilemma to a model: a legitimately authorized
@@ -227,6 +231,9 @@ scripts also need `RUN_AUTHOR_EMAIL` set, since they run outside any Auth.js
 session and there's no other way to know who to attribute the runs to.
 
 ### The public compare view
+
+Deployed at **https://cop-subtasks-decompostion-evals.polariscollective.org/** —
+that link is the one to share; it needs no account.
 
 The site root `/` is the public compare view: readable without signing in,
 but showing only runs whose `is_public` column is `true`. It is the only
