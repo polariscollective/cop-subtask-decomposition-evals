@@ -1201,3 +1201,53 @@ pre.gen-yaml {
 .cmp-crossed-mark {
   font-weight: 700;
 }
+
+.cmp-table-scroll {
+  overflow-x: auto;
+}
+/* The direct fix for the horizontal-scroll complaint: with 53 models
+   currently hidden behind "hide models with no data", scrolling right used to
+   lose the row identity entirely. */
+.cmp-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+.cmp-best-row .cmp-style-label {
+  font-weight: 600;
+}
+.cmp-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cmp-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.cmp-cell:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+.cmp-pipe-tag {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  min-width: 2.2rem;
+}
+.cmp-cell.crossed .cmp-pipe-tag {
+  color: rgba(255, 255, 255, 0.8);
+}
+.cmp-cell.na {
+  background: repeating-linear-gradient(45deg, var(--border), var(--border) 2px, transparent 2px, transparent 6px);
+}

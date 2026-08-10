@@ -7,14 +7,6 @@ import { MODEL_CATALOG } from "../../lib/models";
 import { aggregateSamples } from "../../lib/compare-aggregate.js";
 import { bestOf, crossed, verdictRows } from "../../lib/compare-verdict.js";
 
-const SCENARIOS = [
-  { id: "corporate_log_consolidation_v0", title: "Corporate log consolidation" },
-  { id: "single_point_of_command_v0", title: "Single point of military command" },
-];
-const PIPELINES = [
-  { id: "linear", title: "Plan → execute", sub: "blind, amnesiac executor — one step at a time, no memory of prior steps" },
-  { id: "chained", title: "Chained (direct)", sub: "one continuous conversation — full memory of every prior tool call" },
-];
 // Every model either provider offers, in the same catalog the base
 // dashboard's own model dropdown reads from (lib/models.js) — not just the
 // handful we've actually run batches against. Unrun ones just show "n/a"
@@ -70,6 +62,57 @@ function StepBar({ depth, total }) {
   );
 }
 
+// Both pipelines in one cell, stacked. The one-pager asks where the weak link
+// is — whether keeping the full history is what moves a model — and answering
+// that from two separate tables means looking back and forth. `styles` is a
+// list so the same component serves a single-style row and the merged
+// "best of any style" row.
+const PIPELINE_LABELS = { linear: "P→E", chained: "CHN" };
+// The panel headers that used to carry these sentences are gone in the
+// merged grid; this is the only place left that explains what "linear" and
+// "chained" mean. Surfaced as a title attribute (hover) on each pipeline tag
+// until Task 7 wires it into a richer explanation mechanism.
+const PIPELINE_NOTES = {
+  linear: "blind, amnesiac executor — one step at a time, no memory of prior steps",
+  chained: "one continuous conversation — full memory of every prior tool call",
+};
+
+function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
+  return (
+    <div className="cmp-pair">
+      {["linear", "chained"].map((pipeline) => {
+        const d = bestOf(styles.map((s) => cellData(pipeline, model, scenario, s)));
+        const state = cellState(d);
+        return (
+          <button
+            type="button"
+            key={pipeline}
+            className={`cmp-cell ${state}`}
+            disabled={!d}
+            onClick={() => d && onOpen(d)}
+            title={PIPELINE_LABELS[pipeline]}
+          >
+            <span className="cmp-pipe-tag" title={PIPELINE_NOTES[pipeline]}>
+              {PIPELINE_LABELS[pipeline]}
+            </span>
+            {d ? (
+              <>
+                <StepBar depth={d.depth} total={d.fullSteps} />
+                <span className="cmp-frac">
+                  {state === "crossed" && <span className="cmp-crossed-mark">⚠ </span>}
+                  {d.depth}/{d.fullSteps}
+                </span>
+              </>
+            ) : (
+              <span className="cmp-frac">n/a</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CompareGrid({ signedIn, researchDirectionUrl }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
@@ -90,6 +133,10 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
   // Off by default: signing in should change as little as possible about the
   // page. Checking it reproduces exactly what a signed-out visitor sees.
   const [publicOnly, setPublicOnly] = useState(false);
+  // Merged is the default: one row per scenario showing the best result across
+  // every argument style. Expanding shows the per-style rows, which is what a
+  // researcher wants and what a first-time visitor does not.
+  const [expandStyles, setExpandStyles] = useState(false);
 
   useEffect(() => {
     fetch("/api/compare")
@@ -172,6 +219,17 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
   // worst-first. This is the page's headline, and the only view that stays
   // legible as the model count grows.
   const verdicts = useMemo(() => verdictRows(filteredRows || []), [filteredRows]);
+
+  // Derived, not hardcoded: scenarios are model-generated now, and a fixed
+  // list means every new one is invisible on this page. Every sample already
+  // carries both fields.
+  const scenarios = useMemo(() => {
+    const byId = new Map();
+    for (const r of filteredRows || []) {
+      if (r.scenario && !byId.has(r.scenario)) byId.set(r.scenario, r.scenario_title || r.scenario);
+    }
+    return [...byId].map(([id, title]) => ({ id, title })).sort((a, b) => a.title.localeCompare(b.title));
+  }, [filteredRows]);
 
   function cellData(pipeline, model, scenario, style) {
     return index.get([pipeline, model, scenario, style].join("|")) || null;
@@ -424,135 +482,74 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
             </div>
           </section>
 
-          {SCENARIOS.map((scenario) => {
-            // /api/scenario-detail 404s anonymously for a scenario with no
-            // published (and allowlisted) run — a signed-in user can still
-            // reach any scenario there. Only make the title clickable when
-            // it would actually open something: otherwise, with today's data
-            // (one scenario fully published, the other not at all), half the
-            // titles on the flagship public page are dead clicks that land
-            // on a bare "Failed to load: HTTP 404" in the modal.
-            const canOpen = signedIn || filteredRows.some((r) => r.scenario === scenario.id);
-            return (
+          <label className="cmp-legend-group cmp-toggle" style={{ marginBottom: 12 }}>
+            <input type="checkbox" checked={expandStyles} onChange={(e) => setExpandStyles(e.target.checked)} />
+            Show each argument style separately ({visibleStyles.length})
+          </label>
+
+          {scenarios.map((scenario) => (
             <section key={scenario.id} className="cmp-scenario">
-              {canOpen ? (
-                <h2 className="cmp-scenario-title">
-                  <button
-                    type="button"
-                    className="cmp-scenario-trigger"
-                    onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
-                  >
-                    <span>{scenario.title}</span>
-                    <span className="cmp-scenario-hint">Click here for more details</span>
-                  </button>
-                </h2>
-              ) : (
+              <div className="cmp-scenario-head">
                 <h2 className="cmp-scenario-title">{scenario.title}</h2>
-              )}
-              <div className="cmp-panels">
-                {PIPELINES.map((pipeline) => (
-                  <div key={pipeline.id} className="card cmp-panel">
-                    <div className="cmp-panel-head">{pipeline.title}</div>
-                    <div className="cmp-panel-sub">{pipeline.sub}</div>
-                    {visibleModels.length > 10 && (
-                      <div className="cmp-panel-sub cmp-scroll-hint">
-                        → scroll right within this panel to see all {visibleModels.length} models
-                      </div>
-                    )}
-                    <table className="cmp-grid">
-                      <thead>
-                        <tr>
-                          <th></th>
-                          {visibleModels.map((m) => (
-                            <th key={m} className="cmp-model-head">
-                              {modelLabel(m)}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleStyles.map((style) => (
+                <button
+                  type="button"
+                  className="cmp-scenario-trigger"
+                  onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
+                >
+                  <span className="cmp-scenario-hint">Click here for more details</span>
+                </button>
+              </div>
+              <div className="card cmp-panel">
+                <div className="cmp-table-scroll">
+                  <table className="cmp-grid">
+                    <thead>
+                      <tr>
+                        <th className="cmp-style-label cmp-sticky"></th>
+                        {visibleModels.map((m) => (
+                          <th key={m} className="cmp-model-head">
+                            {modelLabel(m)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="cmp-best-row">
+                        <td className="cmp-style-label cmp-sticky">Best of any style</td>
+                        {visibleModels.map((model) => (
+                          <td key={model} className="cmp-cell-wrap">
+                            <PipelinePair
+                              model={model}
+                              scenario={scenario.id}
+                              styles={visibleStyles}
+                              cellData={cellData}
+                              onOpen={setModalCombo}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                      {expandStyles &&
+                        visibleStyles.map((style) => (
                           <tr key={style}>
-                            <td className="cmp-style-label">{style.replace(/_/g, " ")}</td>
-                            {visibleModels.map((model) => {
-                              const d = cellData(pipeline.id, model, scenario.id, style);
-                              return (
-                                <td key={model} className="cmp-cell-wrap">
-                                  <div
-                                    className={`cmp-cell ${cellState(d)}`}
-                                    tabIndex={0}
-                                    role={d?.id ? "button" : undefined}
-                                    style={d?.id ? { cursor: "pointer" } : undefined}
-                                    onClick={() => d?.id && setModalCombo(d)}
-                                    onKeyDown={(e) => {
-                                      if ((e.key === "Enter" || e.key === " ") && d?.id) {
-                                        e.preventDefault();
-                                        setModalCombo(d);
-                                      }
-                                    }}
-                                    onPointerEnter={(e) =>
-                                      setTooltip({
-                                        x: e.currentTarget.getBoundingClientRect().left,
-                                        y: e.currentTarget.getBoundingClientRect().bottom + 8,
-                                        model,
-                                        scenario: scenario.title,
-                                        pipeline: pipeline.title,
-                                        style,
-                                        d,
-                                      })
-                                    }
-                                    onPointerLeave={() => setTooltip(null)}
-                                    onFocus={(e) =>
-                                      setTooltip({
-                                        x: e.currentTarget.getBoundingClientRect().left,
-                                        y: e.currentTarget.getBoundingClientRect().bottom + 8,
-                                        model,
-                                        scenario: scenario.title,
-                                        pipeline: pipeline.title,
-                                        style,
-                                        d,
-                                      })
-                                    }
-                                    onBlur={() => setTooltip(null)}
-                                  >
-                                    <div className="cmp-frac">
-                                      {!d
-                                        ? "n/a"
-                                        : d.pipeline === "linear" && d.depth === 0 && !d.planAccepted
-                                        ? "no plan"
-                                        : `${d.depth}/${d.fullSteps}`}
-                                      {d?.anyRunning && <span className="cmp-running-mark">*</span>}
-                                      {d?.pipeline === "linear" && d.planAccepted && (
-                                        <span
-                                          className={`cmp-framing-letter ${
-                                            d.planFraming === "test" ? "cmp-framing-test" : "cmp-framing-real"
-                                          }`}
-                                        >
-                                          {d.planFraming === "test" ? "T" : "R"}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {d && d.depth > 0 && <div className="cmp-turns">{d.turnsUsed} turns</div>}
-                                    {d && d.pipeline === "linear" && d.depth === 0 && d.planAccepted && (
-                                      <div className="cmp-turns">plan ok, step 1 refused</div>
-                                    )}
-                                    {d && d.sampleCount > 1 && (
-                                      <div className="cmp-turns">best of {d.sampleCount}</div>
-                                    )}
-                                  </div>
-                                </td>
-                              );
-                            })}
+                            <td className="cmp-style-label cmp-sticky">{style.replace(/_/g, " ")}</td>
+                            {visibleModels.map((model) => (
+                              <td key={model} className="cmp-cell-wrap">
+                                <PipelinePair
+                                  model={model}
+                                  scenario={scenario.id}
+                                  styles={[style]}
+                                  cellData={cellData}
+                                  onOpen={setModalCombo}
+                                />
+                              </td>
+                            ))}
                           </tr>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
-            );
-          })}
+          ))}
 
           <details className="tablewrap" style={{ marginTop: 8 }}>
             <summary>View as a table</summary>
