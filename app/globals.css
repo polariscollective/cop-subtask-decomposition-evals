@@ -1138,3 +1138,65 @@ pre.gen-yaml {
   line-height: 1.55;
   color: var(--ink);
 }
+
+.cmp-bar {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+.cmp-seg {
+  width: 9px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--border);
+}
+/* Validated against the light surface with the dataviz validator:
+   #1c5cab vs the crossed fill #b3312c is ΔE 20.0 protan / 28.3 normal —
+   all six checks pass. Do NOT swap this for the accent green: #2c5f4f vs
+   #b3312c measures ΔE 5.4 protan, the classic red/green failure. */
+.cmp-seg.on {
+  background: #1c5cab;
+}
+
+.cmp-verdicts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cmp-verdicts-head {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.cmp-verdict-row {
+  display: grid;
+  grid-template-columns: 9rem auto 15rem 8rem 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.cmp-verdict-row:last-child {
+  border-bottom: none;
+}
+.cmp-verdict-model {
+  font-weight: 600;
+}
+.cmp-verdict-state.crossed {
+  color: var(--danger);
+  font-weight: 600;
+}
+.cmp-verdict-count,
+.cmp-verdict-styles {
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 860px) {
+  .cmp-verdict-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

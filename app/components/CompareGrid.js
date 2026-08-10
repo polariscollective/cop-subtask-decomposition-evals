@@ -5,6 +5,7 @@ import RunTranscriptModal from "./RunTranscriptModal";
 import ScenarioDetailModal from "./ScenarioDetailModal";
 import { MODEL_CATALOG } from "../../lib/models";
 import { aggregateSamples } from "../../lib/compare-aggregate.js";
+import { bestOf, crossed, verdictRows } from "../../lib/compare-verdict.js";
 
 const SCENARIOS = [
   { id: "corporate_log_consolidation_v0", title: "Corporate log consolidation" },
@@ -59,6 +60,24 @@ function cellClass(d) {
   const classes = ["d" + Math.min(d.depth, 4)];
   if (d.depth === d.fullSteps) classes.push("full-reached");
   return classes.join(" ");
+}
+
+// Depth is a magnitude, so it is encoded by length, not by hue. The five-step
+// colour ramp this replaces put 3/4 and 4/4 at ΔE 14.7 in normal vision —
+// under the readability floor — which is exactly the distinction this project
+// turns on. Bar length has no such problem, and it frees the cell's fill for
+// the one thing that is a state rather than a magnitude: crossing the
+// critical step. `total` is per-scenario (chains are 4-5 tools), never
+// hardcoded.
+function StepBar({ depth, total }) {
+  const n = Math.max(0, total || 0);
+  return (
+    <span className="cmp-bar" role="img" aria-label={`${depth} of ${n} steps reached`}>
+      {Array.from({ length: n }, (_, i) => (
+        <span key={i} className={i < depth ? "cmp-seg on" : "cmp-seg"} />
+      ))}
+    </span>
+  );
 }
 
 export default function CompareGrid({ signedIn, researchDirectionUrl }) {
@@ -158,6 +177,11 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
     const anyProgress = withData.filter((r) => r.depth > 0).length;
     return { total: withData.length, completed, anyProgress };
   }, [filteredRows]);
+
+  // The cross-style, cross-scenario, cross-pipeline merge: one row per model,
+  // worst-first. This is the page's headline, and the only view that stays
+  // legible as the model count grows.
+  const verdicts = useMemo(() => verdictRows(filteredRows || []), [filteredRows]);
 
   function cellData(pipeline, model, scenario, style) {
     return index.get([pipeline, model, scenario, style].join("|")) || null;
@@ -281,6 +305,30 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
 
       {rows && (
         <>
+          <section className="card cmp-verdicts" aria-label="Result by model">
+            <h2 className="cmp-verdicts-head">Across everything tried so far</h2>
+            {verdicts.length === 0 && <p className="plan-caption">No runs match the current filters.</p>}
+            {verdicts.map((v) => (
+              <div className="cmp-verdict-row" key={v.model}>
+                <span className="cmp-verdict-model">{modelLabel(v.model)}</span>
+                <StepBar depth={v.bestDepth} total={v.bestFullSteps} />
+                <span className={`cmp-verdict-state${v.crossedCount > 0 ? " crossed" : ""}`}>
+                  {v.crossedCount > 0
+                    ? "⚠ crossed the critical step"
+                    : `stopped at step ${v.bestDepth} of ${v.bestFullSteps}`}
+                </span>
+                <span className="cmp-verdict-count">
+                  {v.crossedCount} of {v.attemptCount} attempts
+                </span>
+                {v.crossedStyles.length > 0 && (
+                  <span className="cmp-verdict-styles">
+                    under: {v.crossedStyles.map((s) => s.replace(/_/g, " ")).join(" · ")}
+                  </span>
+                )}
+              </div>
+            ))}
+          </section>
+
           <section className="card cmp-legend">
             <div className="cmp-legend-group">
               <span style={{ color: "var(--ink-2)" }}>Steps/tools reached</span>
