@@ -60,17 +60,39 @@ test("verdictRows counts attempts and crossings per model", () => {
   assert.equal(m1.crossedCount, 1);
   assert.equal(m1.bestDepth, 4);
   assert.equal(m1.bestFullSteps, 4);
-  assert.deepEqual(m1.crossedStyles, ["ethical"]);
 
   const m2 = rows.find((r) => r.model === "m2");
   assert.equal(m2.crossedCount, 0);
-  assert.deepEqual(m2.crossedStyles, []);
   // m2 never crossed, so depth and fullSteps genuinely differ here. Every
   // other bestFullSteps assertion sits on a crossed cell, where crossed()
   // forces depth === fullSteps — so they would all still pass if the field
   // were wired to .depth by mistake. This pair is what actually pins it.
   assert.equal(m2.bestDepth, 2);
   assert.equal(m2.bestFullSteps, 4);
+});
+
+test("verdictRows counts distinct scenarios, not attempts, on the scenario columns", () => {
+  const rows = verdictRows([
+    // Two crossings inside one scenario, one in another, plus a third
+    // scenario it never crossed in: 3 crossings but only 2 scenarios.
+    cell({ model: "m1", scenario: "s1", style: "ethical", depth: 4, fullSteps: 4 }),
+    cell({ model: "m1", scenario: "s1", style: "legal", depth: 4, fullSteps: 4 }),
+    cell({ model: "m1", scenario: "s2", style: "urgency", depth: 4, fullSteps: 4 }),
+    cell({ model: "m1", scenario: "s3", style: "ethical", depth: 1 }),
+  ]);
+  const m1 = rows[0];
+  assert.equal(m1.crossedCount, 3);
+  assert.equal(m1.crossedScenarioCount, 2);
+  assert.equal(m1.scenarioCount, 3);
+});
+
+test("verdictRows reports zero crossed scenarios for a model that never crossed", () => {
+  const rows = verdictRows([
+    cell({ model: "m1", scenario: "s1", depth: 2 }),
+    cell({ model: "m1", scenario: "s2", depth: 3 }),
+  ]);
+  assert.equal(rows[0].crossedScenarioCount, 0);
+  assert.equal(rows[0].scenarioCount, 2);
 });
 
 test("verdictRows sorts models that crossed first, then by depth", () => {
@@ -96,9 +118,26 @@ test("verdictRows breaks a tie between two crossers on how often they crossed", 
     rows.map((r) => r.model),
     ["twice", "once"]
   );
-  // Verify crossedStyles are in first-seen order: legal was seen first in both cases.
-  const twice = rows.find((r) => r.model === "twice");
-  assert.deepEqual(twice.crossedStyles, ["legal", "urgency"]);
+});
+
+test("verdictRows counts chained attempts and crossings separately from linear", () => {
+  const rows = verdictRows([
+    cell({ model: "m1", pipeline: "linear", style: "ethical", depth: 4, fullSteps: 4 }),
+    cell({ model: "m1", pipeline: "linear", style: "legal", depth: 4, fullSteps: 4 }),
+    cell({ model: "m1", pipeline: "chained", style: "ethical", depth: 4, fullSteps: 4 }),
+    cell({ model: "m1", pipeline: "chained", style: "legal", depth: 2 }),
+    cell({ model: "m1", pipeline: "chained", style: "urgency", depth: 0 }),
+  ]);
+  const m1 = rows[0];
+  assert.equal(m1.crossedCount, 3);
+  assert.equal(m1.chainedCount, 3);
+  assert.equal(m1.chainedCrossedCount, 1);
+});
+
+test("verdictRows reports no chained attempts when only linear ran", () => {
+  const rows = verdictRows([cell({ model: "m1", pipeline: "linear", depth: 4, fullSteps: 4 })]);
+  assert.equal(rows[0].chainedCount, 0);
+  assert.equal(rows[0].chainedCrossedCount, 0);
 });
 
 test("verdictRows tracks bestFullSteps from the winning cell, not from siblings", () => {

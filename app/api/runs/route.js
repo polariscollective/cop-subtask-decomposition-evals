@@ -30,6 +30,9 @@ export async function GET(req) {
       .from("runs")
       .select("data, style, user_email, is_public")
       .eq("id", id)
+      // A soft-deleted run is gone from the app, not just from the lists —
+      // otherwise an id captured before the delete still opens its transcript.
+      .is("deleted_at", null)
       .maybeSingle();
     if (error || !row) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -63,7 +66,7 @@ export async function GET(req) {
   // the surface you load a run from to continue and overwrite it, so it must
   // only ever offer runs the caller actually owns. /runs and / pass nothing
   // and keep their existing team-wide visibility.
-  let query = supabase.from("runs").select("id, style, data, user_email");
+  let query = supabase.from("runs").select("id, style, data, user_email").is("deleted_at", null);
   // Resolved for every request, not just the scoped one: the team-wide list
   // still has to say which rows are the caller's, so /runs can offer "Open"
   // only where loading is actually allowed.

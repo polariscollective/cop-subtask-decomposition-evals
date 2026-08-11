@@ -33,7 +33,11 @@ export async function GET(req) {
       .from("runs")
       .select("data, user_email")
       .eq("scenario_id", scenarioId)
-      .eq("is_public", true);
+      .eq("is_public", true)
+      // A soft-deleted run no longer appears in the public grid, so it must
+      // not unlock this scenario's spec either — same inclusion rule as
+      // /api/compare, on all three of its axes now.
+      .is("deleted_at", null);
     const allowed =
       !candidatesError &&
       (candidates || []).some(

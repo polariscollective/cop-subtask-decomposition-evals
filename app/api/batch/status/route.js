@@ -65,7 +65,11 @@ export async function GET(req) {
     const { data: runs } = await supabase
       .from("runs")
       .select("id, plan_accepted:data->plan_result->accepted, direct_accepted:data->direct_result->accepted")
-      .in("id", doneRunIds);
+      .in("id", doneRunIds)
+      // A soft-deleted run reports nothing anywhere, including here — the
+      // attempt still shows as done (that's the batch's own bookkeeping, and
+      // it did run), but its result is no longer part of any surface.
+      .is("deleted_at", null);
     for (const r of runs || []) {
       const accepted = r.plan_accepted ?? r.direct_accepted ?? null;
       acceptedByRunId.set(r.id, accepted);

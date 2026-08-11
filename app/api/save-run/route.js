@@ -56,6 +56,11 @@ export async function POST(req) {
       .select("data")
       .eq("id", runId)
       .eq("user_email", userEmail)
+      // A soft-deleted run is not offered by GET /api/runs?mine=true any
+      // more, so no live surface can hand out its id — this makes an id kept
+      // from before the delete a clean 404 rather than a write onto a row
+      // nothing displays.
+      .is("deleted_at", null)
       .maybeSingle();
     if (readError) {
       // A malformed runId reaches Postgres as an invalid uuid cast; surfacing

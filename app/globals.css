@@ -62,6 +62,71 @@ body {
   color: var(--muted);
 }
 
+/* The work-in-progress notice shares the sign-in bar: the chip is pushed to
+   the far left of that flex row (which otherwise packs everything right), and
+   the panel it opens sits below the row, still inside the same header. */
+.wip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.wip-chip:hover { border-color: var(--accent); }
+.wip-chip.open { background: var(--warn-bg); border-color: var(--warn); }
+.wip-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.wip-caret { color: var(--muted); font-size: 10px; }
+
+.wip-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 24px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--ink);
+}
+.wip-panel-body { flex: 1; min-width: 0; }
+.wip-panel p {
+  max-width: 88ch;
+  margin: 0;
+  line-height: 1.6;
+}
+.wip-panel p + p { margin-top: 8px; }
+.wip-panel a { color: var(--accent); font-weight: 650; }
+.wip-panel a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.wip-minimize {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.wip-minimize:hover { border-color: var(--accent); color: var(--accent); }
+.wip-minimize:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .turn-cost {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -339,6 +404,126 @@ input:focus-visible {
   margin-bottom: 4px;
 }
 
+/* Scenario modal: the tools drawn as the chain the model walks, since the
+   order is the measurement. A flat list of tool cards (what the inline panel
+   on the manual dashboard still shows) reads as a menu of options, which is
+   exactly the wrong mental model for a page about how far down a chain a
+   model gets. Deliberately not .detail-panel — that one carries the top rule
+   and margin it needs as an inline section of the dashboard, which inside a
+   modal body just draws a stray line under the header. */
+.sdm-panel > .field-label {
+  margin-bottom: 2px;
+}
+.sdm-chain-lead {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 4px 0 0;
+  max-width: 80ch;
+}
+.sdm-steps {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.sdm-step {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.sdm-step.critical {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+/* The connector drawn through the gap, aligned to the centre of the step
+   badge (14px of head padding + half of the 22px badge). */
+.sdm-step + .sdm-step::before {
+  content: "";
+  position: absolute;
+  left: 25px;
+  top: -10px;
+  width: 2px;
+  height: 10px;
+  background: var(--border);
+}
+.sdm-step-head {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.sdm-step-head:hover { background: rgba(0, 0, 0, 0.03); }
+.sdm-step-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.sdm-step-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.sdm-step.critical .sdm-step-num {
+  background: var(--danger);
+  color: #ffffff;
+}
+.sdm-step-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sdm-step-toprow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sdm-step-tool { font-size: 13.5px; font-weight: 650; }
+.sdm-step-pos {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.sdm-step-desc {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.sdm-step-caret {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+  padding-top: 5px;
+}
+.sdm-step-body {
+  padding: 12px 14px 14px 48px;
+  border-top: 1px dashed var(--border);
+}
+@media (max-width: 620px) {
+  .sdm-step-body { padding-left: 14px; }
+}
+
 /* Plan list */
 .plan-list {
   list-style: none;
@@ -601,34 +786,6 @@ input:focus-visible {
   background: var(--surface);
   color: var(--muted);
 }
-.cmp-preview-banner {
-  margin: 18px 0 22px;
-  padding: 16px 18px;
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--accent);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink-2);
-}
-.cmp-preview-kicker {
-  margin-bottom: 6px;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.cmp-preview-banner p {
-  max-width: 88ch;
-  margin: 0;
-  line-height: 1.6;
-}
-.cmp-preview-banner p + p { margin-top: 8px; }
-.cmp-preview-banner a { color: var(--accent); font-weight: 650; }
-.cmp-preview-banner a:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
 .cmp-batch-details summary {
   cursor: pointer;
   user-select: none;
@@ -653,35 +810,34 @@ input:focus-visible {
 }
 
 .cmp-scenario { margin-bottom: 26px; }
+.cmp-scenario-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
 .cmp-scenario-title {
   font-size: 15px;
   font-weight: 650;
-  margin: 0 0 10px;
+  margin: 0;
 }
-.cmp-scenario-trigger {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 10px;
+/* A bracketed [View] beside the title rather than a sentence under it: the
+   title is the thing being opened, and the sentence read like body copy on a
+   page that already has plenty. */
+.cmp-scenario-view {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
   padding: 0;
   border: 0;
   background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
+  color: var(--accent);
   cursor: pointer;
 }
-.cmp-scenario-hint {
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.cmp-scenario-trigger:hover .cmp-scenario-hint { text-decoration-thickness: 2px; }
-.cmp-scenario-trigger:focus-visible {
+.cmp-scenario-view:hover { text-decoration: underline; text-underline-offset: 3px; }
+.cmp-scenario-view:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 4px;
+  outline-offset: 3px;
   border-radius: 3px;
 }
 .cmp-panels {
@@ -705,11 +861,23 @@ input:focus-visible {
 .cmp-panel-sub { font-size: 11px; color: var(--muted); margin: 2px 0 12px; line-height: 1.5; }
 .cmp-scroll-hint { color: var(--accent); font-weight: 600; }
 
-table.cmp-grid { border-collapse: collapse; width: 100%; font-size: 12px; }
+/* table-layout: fixed with explicit column widths — without it each scenario
+   table sizes its own columns to its own content ("n/a" in one, "⚠ 4/4" in
+   the next), so two grids stacked down the page never line up. Fixed widths
+   make every scenario's grid the same grid. min-width keeps it filling the
+   card when only a few models are shown; past that it scrolls. */
+table.cmp-grid {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12px;
+}
 table.cmp-grid th, table.cmp-grid td { padding: 0; }
 .cmp-style-label {
   position: sticky;
   left: 0;
+  width: 156px;
   background: var(--surface);
   text-align: right;
   padding: 3px 8px 3px 0 !important;
@@ -718,6 +886,7 @@ table.cmp-grid th, table.cmp-grid td { padding: 0; }
   font-size: 11.5px;
 }
 .cmp-model-head {
+  width: 150px;
   text-align: center;
   padding: 0 3px 6px !important;
   font-weight: 650;
@@ -733,12 +902,19 @@ table.cmp-grid th, table.cmp-grid td { padding: 0; }
   font-weight: 650;
   line-height: 1.2;
 }
+/* The single meta line under every result line: turn count, then "(best of
+   N)" in the same line. Always rendered, even when empty, so the result line
+   lands at the same height in every cell. */
 .cmp-turns {
   font-family: ui-monospace, "SF Mono", monospace;
   font-variant-numeric: tabular-nums;
   font-size: 9px;
   opacity: 0.85;
   line-height: 1.3;
+  min-height: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Inherits color rather than setting its own so it stays legible against
    the wide range of cell backgrounds (light d0/na through dark d3/d4). */
@@ -760,10 +936,19 @@ table.cmp-grid th, table.cmp-grid td { padding: 0; }
   vertical-align: 2px;
   font-family: ui-monospace, "SF Mono", monospace;
 }
+/* Was a 35%-white fill, which only ever showed up against the old dark-blue
+   ramp cells. Those are gone: an un-crossed cell is now white and so is the
+   key band, so the chip was invisible in both. Neutral fill by default, and
+   the translucent white kept only where it still works — inside a crossed
+   cell's red. */
 .cmp-framing-letter.cmp-framing-real {
+  background: var(--border);
+  color: var(--ink);
+  opacity: 1;
+}
+.cmp-pipe-cell.crossed .cmp-framing-letter.cmp-framing-real {
   background: rgba(255, 255, 255, 0.35);
-  color: inherit;
-  opacity: 0.75;
+  color: #fff;
 }
 .cmp-framing-letter.cmp-framing-test {
   background: var(--warn);
@@ -835,12 +1020,22 @@ table.datatable tbody tr:hover { background: var(--page, var(--bg)); }
   padding: 40px 20px;
   overflow-y: auto;
 }
+/* The modal owns its own scrolling: the header used to be `position: sticky`
+   inside the scrolling backdrop, which meant the body scrolled past it under
+   a header pinned to the viewport rather than to the modal — the title ended
+   up sitting over the dimmed page with content visible around and above it.
+   A flex column with a bounded height and a scrolling body has no such
+   ambiguity: the header simply never moves. */
 .rtm-modal {
   background: var(--surface);
   border-radius: 12px;
   border: 1px solid var(--border);
   width: 100%;
   max-width: 780px;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
 .rtm-header {
@@ -848,16 +1043,19 @@ table.datatable tbody tr:hover { background: var(--page, var(--bg)); }
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  flex-shrink: 0;
   padding: 18px 22px;
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
   background: var(--surface);
   border-radius: 12px 12px 0 0;
 }
 .rtm-title { font-size: 14px; font-weight: 650; line-height: 1.4; }
 .rtm-filename { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.rtm-body { padding: 20px 22px 26px; }
+.rtm-body {
+  padding: 20px 22px 26px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .rtm-stage {
   padding: 16px 0;
   border-top: 1px solid var(--border);
@@ -1048,14 +1246,16 @@ pre.gen-yaml {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  max-width: 78ch;
 }
+/* One vertical list, each point on the full width. Read in order — the
+   columns this replaces broke the sequence, since the eye ran down the first
+   column before coming back for the second. */
 .cmp-primer ul {
   margin: 0;
   padding-left: 18px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 .cmp-primer li {
   font-size: 13.5px;
@@ -1096,7 +1296,7 @@ pre.gen-yaml {
 }
 .cmp-verdict-row {
   display: grid;
-  grid-template-columns: 9rem auto 15rem 8rem 1fr;
+  grid-template-columns: 9rem auto 15rem 8rem 9rem 1fr;
   align-items: center;
   gap: 12px;
   padding: 7px 0;
@@ -1114,9 +1314,16 @@ pre.gen-yaml {
   font-weight: 600;
 }
 .cmp-verdict-count,
-.cmp-verdict-styles {
+.cmp-verdict-chained {
   color: var(--muted);
   font-size: 12px;
+}
+.cmp-verdict-chained {
+  font-variant-numeric: tabular-nums;
+}
+.cmp-verdict-chained.crossed {
+  color: var(--danger);
+  font-weight: 600;
 }
 @media (max-width: 860px) {
   .cmp-verdict-row {
@@ -1128,6 +1335,143 @@ pre.gen-yaml {
 .cmp-crossed-mark {
   font-weight: 700;
 }
+
+/* Style × model heatmap.
+
+   The ramp is one hue, light → dark, ending on --danger: a crossing rate is a
+   magnitude with a direction, not a polarity, so a green→red (or blue→red)
+   diverging ramp would be wrong twice over — it puts a hue change at 50%, as
+   if half the attempts crossing were a neutral result, and it spends a second
+   hue on a scale that has only one end worth naming. Ending on the same red
+   the grids use for "crossed" also keeps one meaning for red across the page.
+
+   Checked with the dataviz validator (light surface): a sequential ramp's
+   requirement is lightness monotonicity, which holds (0.95 → 0.86 → 0.70 →
+   0.45), and its low-contrast steps carry the required relief because every
+   cell prints its own percentage — the colour is never the only encoding. Ink
+   stays dark through heat-3 (contrast 7.0:1) and flips to white on heat-4
+   (6.1:1). */
+.cmp-heat { display: block; }
+.cmp-heat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cmp-heat-lead {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0 0 14px;
+  max-width: 92ch;
+}
+.cmp-pipe-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.cmp-pipe-toggle-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.cmp-pipe-toggle-btn + .cmp-pipe-toggle-btn { border-left: 1px solid var(--border); }
+.cmp-pipe-toggle-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.cmp-pipe-toggle-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Same fixed column geometry as the scenario grids below (156px label, 150px
+   per model), so the heatmap's columns sit exactly over theirs instead of
+   being stretched to the card width — three models used to give ~340px cells
+   for a three-character label. */
+table.cmp-heat-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: max-content;
+  font-size: 12px;
+}
+table.cmp-heat-table th, table.cmp-heat-table td { padding: 0; }
+.cmp-heat-style {
+  width: 156px;
+  text-align: right;
+  padding: 3px 10px 3px 0 !important;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.cmp-heat-cell-wrap { padding: 2px !important; }
+/* align-items: baseline lines the rate and the count up on one baseline, but
+   on its own it also pins that line to the top of the 30px box. flex-wrap +
+   align-content: center is what centres the line itself in the cell — with a
+   single flex line, align-content has nothing else to do. */
+.cmp-heat-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: center;
+  justify-content: center;
+  overflow: hidden;
+  gap: 6px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink);
+}
+/* The rate leads, the raw count follows it at 85% size and reduced weight:
+   same line, clearly subordinate, never mistaken for the number the colour
+   encodes. */
+.cmp-heat-n {
+  font-size: 9.5px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+.cmp-heat-cell.heat-0 { background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+.cmp-heat-cell.heat-1 { background: #fbecea; }
+.cmp-heat-cell.heat-2 { background: #f0c4bd; }
+.cmp-heat-cell.heat-3 { background: #dd8a7e; }
+.cmp-heat-cell.heat-4 { background: #b3312c; color: #ffffff; }
+.cmp-heat-cell.na {
+  background: repeating-linear-gradient(45deg, var(--border), var(--border) 2px, transparent 2px, transparent 6px);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.cmp-heat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.cmp-heat-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.cmp-heat-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.cmp-heat-swatch.heat-0 { background: var(--surface); border: 1px solid var(--border); }
+.cmp-heat-swatch.heat-1 { background: #fbecea; }
+.cmp-heat-swatch.heat-2 { background: #f0c4bd; }
+.cmp-heat-swatch.heat-3 { background: #dd8a7e; }
+.cmp-heat-swatch.heat-4 { background: #b3312c; }
 
 .cmp-table-scroll {
   overflow-x: auto;
@@ -1158,11 +1502,18 @@ pre.gen-yaml {
    avoided the collision outright. That old .cmp-cell family (including its
    na/plan-refused/crossed/open state variants) has since been deleted
    entirely — the state classes below are the only ones that exist now. */
+/* Fixed height, not min-height: a cell that grew by a line (a long "best
+   of N" note, a wrapped refusal line) shifted every neighbour in its row and
+   the grid stopped being readable across. Two lines is the most any cell
+   renders, and both are clipped rather than allowed to wrap. */
 .cmp-pipe-cell {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
   width: 100%;
+  height: 44px;
+  overflow: hidden;
   padding: 4px 7px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1193,7 +1544,7 @@ pre.gen-yaml {
   color: var(--muted);
   min-width: 2.2rem;
 }
-.cmp-pipe-cell.crossed .cmp-pipe-tag {
+.cmp-pipe-cell.crossed.heat-4 .cmp-pipe-tag {
   color: rgba(255, 255, 255, 0.8);
 }
 .cmp-pipe-cell.na {
@@ -1217,15 +1568,27 @@ pre.gen-yaml {
   font-weight: 600;
 }
 /* Crossing the critical step reads red; not crossed (but not plan-refused
-   or na either) gets no fill, just the surface. */
+   or na either) gets no fill, just the surface.
+
+   The red is graded on the same ramp as the heatmap: how much of it a cell
+   gets is the share of that combo's attempts that crossed, so a crossing that
+   reproduces 1 time in 3 doesn't look like one that reproduces 3 in 3. The
+   border stays full --danger at every step — the state must not fade out with
+   the magnitude, or a rare crossing would read as an ordinary open cell. */
 .cmp-pipe-cell.crossed {
+  border-color: var(--danger);
+}
+.cmp-pipe-cell.crossed.heat-1 { background: #fbecea; }
+.cmp-pipe-cell.crossed.heat-2 { background: #f0c4bd; }
+.cmp-pipe-cell.crossed.heat-3 { background: #dd8a7e; }
+.cmp-pipe-cell.crossed.heat-4 {
   background: var(--danger);
   color: #ffffff;
 }
-.cmp-pipe-cell.crossed .cmp-seg.on {
+.cmp-pipe-cell.crossed.heat-4 .cmp-seg.on {
   background: #ffffff;
 }
-.cmp-pipe-cell.crossed .cmp-seg {
+.cmp-pipe-cell.crossed.heat-4 .cmp-seg {
   background: rgba(255, 255, 255, 0.35);
 }
 .cmp-pipe-cell.open {
@@ -1245,6 +1608,7 @@ pre.gen-yaml {
   align-items: center;
   gap: 7px;
 }
+.cmp-key-ramp { display: inline-flex; gap: 2px; }
 .cmp-key-swatch {
   width: 14px;
   height: 14px;
@@ -1252,6 +1616,10 @@ pre.gen-yaml {
   background: var(--danger);
   display: inline-block;
 }
+.cmp-key-swatch.heat-1 { background: #fbecea; border: 1px solid var(--border); }
+.cmp-key-swatch.heat-2 { background: #f0c4bd; }
+.cmp-key-swatch.heat-3 { background: #dd8a7e; }
+.cmp-key-swatch.heat-4 { background: var(--danger); }
 .cmp-note {
   border-bottom: 1px dotted var(--muted);
   cursor: help;

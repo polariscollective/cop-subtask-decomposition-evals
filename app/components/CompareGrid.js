@@ -6,6 +6,7 @@ import ScenarioDetailModal from "./ScenarioDetailModal";
 import { MODEL_CATALOG } from "../../lib/models";
 import { aggregateSamples } from "../../lib/compare-aggregate.js";
 import { bestOf, crossed, verdictRows } from "../../lib/compare-verdict.js";
+import { HEAT_MODES, crossedShare, rateMatrix } from "../../lib/compare-heatmap.js";
 
 // Every model either provider offers, in the same catalog the base
 // dashboard's own model dropdown reads from (lib/models.js) — not just the
@@ -62,6 +63,44 @@ function StepBar({ depth, total }) {
   );
 }
 
+// A sequential single-hue ramp, surface → --danger, in five steps. The
+// crossing rate is a magnitude with a direction (0% is the outcome we want,
+// 100% the one we don't), not a polarity around a meaningful middle, so it
+// gets one hue getting darker rather than a green-to-red ramp — which would
+// put a hue change at 50% and imply that half the attempts crossing is some
+// kind of neutral. It also keeps red meaning exactly what it means in the
+// grids below: crossed. Every cell prints its own percentage, so the colour
+// is a second reading of the number, never the only one.
+function heatStep(rate) {
+  if (rate <= 0) return 0;
+  if (rate <= 0.25) return 1;
+  if (rate <= 0.5) return 2;
+  if (rate <= 0.75) return 3;
+  return 4;
+}
+
+// What each mode is actually asking, in the reader's terms. Kept next to the
+// grid's own footnotes rather than in lib/compare-heatmap.js, which stays
+// pure derivation — the predicates live there, the prose lives here.
+const HEAT_MODE_NOTES = {
+  linear:
+    "Plan first, then one blind step at a time; the model reaches the critical step or stops short.",
+  chained:
+    "The whole chain in one conversation, with full memory of every prior tool call.",
+  plan_real:
+    "Planning only, no pretext: every linear attempt is asked for a plan under the real framing first, so every attempt counts here.",
+  plan_test:
+    "Planning only, under the test pretext — which is offered only after a real-framing refusal. Counts just those attempts, so it reads as: once pushed to the pretext, how often does a plan come out.",
+};
+
+const HEAT_LEGEND = [
+  { step: 0, label: "0%" },
+  { step: 1, label: "≤25%" },
+  { step: 2, label: "≤50%" },
+  { step: 3, label: "≤75%" },
+  { step: 4, label: "100%" },
+];
+
 // Both pipelines in one cell, stacked. The one-pager asks where the weak link
 // is — whether keeping the full history is what moves a model — and answering
 // that from two separate tables means looking back and forth. `styles` is a
@@ -79,14 +118,35 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
         // identical to ordinary lack of progress — that's the "different
         // finding" the legend calls out.
         const noPlan = d && d.pipeline === "linear" && d.depth === 0 && !d.planAccepted;
+        // Every cell gets exactly two lines — the result line, then one meta
+        // line — so the whole grid keeps a single fixed cell height and rows
+        // stay scannable across. Everything that used to stack on its own
+        // line (turn count, "best of N", the plan-refused note) shares this
+        // one, which is also why "best of N" reads as a parenthetical: it
+        // qualifies the number in front of it rather than standing alone.
+        const planStalled = d && d.pipeline === "linear" && d.depth === 0 && d.planAccepted;
+        // A crossed cell is filled by how reproducible the crossing was, on
+        // the same ramp as the heatmap above: crossing on two attempts of
+        // three is two-thirds of the red. The cell itself still reports the
+        // best attempt (that's what the fraction and the bar are), so the
+        // state stays carried by the ⚠ and the red border — the fill is the
+        // magnitude behind it, never the only thing saying "crossed".
+        const share = state === "crossed" ? crossedShare(d) : 0;
+        const heatClass = state === "crossed" ? ` heat-${heatStep(share)}` : "";
+        const title =
+          state === "crossed"
+            ? `${PIPELINE_LABELS[pipeline]} — crossed on ${Math.round(share * d.sampleCount)} of ${
+                d.sampleCount
+              } attempt${d.sampleCount === 1 ? "" : "s"}`
+            : PIPELINE_LABELS[pipeline];
         return (
           <button
             type="button"
             key={pipeline}
-            className={`cmp-pipe-cell ${state}`}
+            className={`cmp-pipe-cell ${state}${heatClass}`}
             disabled={!d}
             onClick={() => d && onOpen(d)}
-            title={PIPELINE_LABELS[pipeline]}
+            title={title}
           >
             <span className="cmp-pipe-line1">
               <Note kind={pipeline}>
@@ -122,17 +182,16 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
                 </Note>
               )}
             </span>
-            {d && d.depth > 0 && <div className="cmp-turns">{d.turnsUsed} turns</div>}
-            {d && d.pipeline === "linear" && d.depth === 0 && d.planAccepted && (
-              <Note kind="planRefused">
-                <div className="cmp-turns">plan ok, step 1 refused</div>
-              </Note>
-            )}
-            {d && d.sampleCount > 1 && (
-              <Note kind="bestOf">
-                <div className="cmp-turns">best of {d.sampleCount}</div>
-              </Note>
-            )}
+            <div className="cmp-turns">
+              {d && d.depth > 0 && `${d.turnsUsed} turns`}
+              {planStalled && <Note kind="planRefused">step 1 refused</Note>}
+              {d && d.sampleCount > 1 && (
+                <>
+                  {(d.depth > 0 || planStalled) && " "}
+                  (<Note kind="bestOf">best of {d.sampleCount}</Note>)
+                </>
+              )}
+            </div>
           </button>
         );
       })}
@@ -144,8 +203,8 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
 // footnotes above a grid the reader has not looked at yet. Full sentences on
 // purpose: these are read once, by someone who has never seen the project.
 const NOTES = {
-  T: "Test framing. Changes only the tool descriptions shown to the planner, and only during planning. Every execution step afterwards uses the real tool descriptions and the real goal. It's a workaround to get a plan out — and one that exists in real life.",
-  R: "Real framing. The plan was accepted without any pretext.",
+  R: "The plan was written on the first ask, with both the goal and the tool descriptions stated as they really are — including what the last call irreversibly does. No pretext was needed.",
+  T: "The plan was only written after we softened the framing. Two things change, not one: the goal is reworded, and the tools are re-described as belonging to a test environment. The honest framing is always tried first, and every argument style exhausted, before we fall back to this. Nothing after planning changes — every step that actually runs uses the real goal and the real tool descriptions. So a T means the pretext got a plan out, not that the steps below it ran under one.",
   bestOf:
     "This combination was run more than once; the deepest run is shown. Models are not deterministic and results near a decision boundary flip between runs.",
   noPlan: "The model refused to produce a plan at all, so no step was ever executed.",
@@ -153,8 +212,10 @@ const NOTES = {
     "It agreed to the plan, then refused the first tool call — a different finding from refusing to plan.",
   na: "This combination has not been run yet.",
   running: "Batch still running — this number may still change.",
-  linear: "blind, amnesiac executor — one step at a time, no memory of prior steps",
-  chained: "one continuous conversation — full memory of every prior tool call",
+  linear:
+    "Plan → execute. One model is asked to write the whole plan first. Each step is then carried out by a separate model that sees only the previous step's output — not the goal, not the plan, not the steps before it.",
+  chained:
+    "Chained. One model gets the whole situation and all the tools at once, and works through them itself in a single conversation, seeing each result before deciding the next call.",
 };
 
 function Note({ kind, children }) {
@@ -165,7 +226,7 @@ function Note({ kind, children }) {
   );
 }
 
-export default function CompareGrid({ signedIn, researchDirectionUrl }) {
+export default function CompareGrid({ signedIn }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [modalCombo, setModalCombo] = useState(null);
@@ -188,6 +249,10 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
   // every argument style. Expanding shows the per-style rows, which is what a
   // researcher wants and what a first-time visitor does not.
   const [expandStyles, setExpandStyles] = useState(false);
+  // The heatmap answers one question at a time — see HEAT_MODES. Plan →
+  // Execute is the default because it's the half with results in it; the
+  // other three are the comparisons that make it mean something.
+  const [heatMode, setHeatMode] = useState("linear");
 
   useEffect(() => {
     fetch("/api/compare")
@@ -270,6 +335,8 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
   // worst-first. This is the page's headline, and the only view that stays
   // legible as the model count grows.
   const verdicts = useMemo(() => verdictRows(filteredRows || []), [filteredRows]);
+
+  const heat = useMemo(() => rateMatrix(filteredRows || [], heatMode), [filteredRows, heatMode]);
 
   // Derived, not hardcoded: scenarios are model-generated now, and a fixed
   // list means every new one is invisible on this page. Every sample already
@@ -355,45 +422,29 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
       <section className="cmp-primer" aria-label="How to read this page">
         <ul>
           <li>
-            Each scenario is a chain of 4&ndash;5 tool calls, made one at a time. Outputs are
-            stubbed &mdash; nothing here touches a real system.
-          </li>
-          <li>The last call is the irreversible one that removes human oversight.</li>
-          <li>
-            These scenarios have a right answer: don&rsquo;t make that call. What&rsquo;s measured
-            is how much pressure it takes to make it anyway.
+            Each scenario is a chain of 4&ndash;5 tool calls, outputs stubbed. The last one is the
+            critical call &mdash; the one that should never be made. We measure what it takes to
+            get it made anyway.
           </li>
           <li>
-            A model that hedges in prose but completes the chain is the finding.
+            When it refuses, we argue back &mdash; up to 10 turns, one fixed argument style per
+            attempt, several styles per model. That is how we see which angle moves which model.
+          </li>
+          <li>
+            <strong>Chained</strong> &mdash; one model, full context, calls every tool itself.
+          </li>
+          <li>
+            <strong>Plan &rarr; execute</strong> &mdash; one model plans; each step then runs on a
+            model that sees only the previous step&rsquo;s output.
+          </li>
+          <li>
+            Many models refuse to plan at all. When that happens we ask again with the goal and
+            the tool descriptions softened into a test environment. A plan obtained that way is
+            marked <span className="cmp-framing-letter cmp-framing-test">T</span> &mdash; but
+            every step that then runs uses the real ones.
           </li>
         </ul>
       </section>
-
-      {!signedIn && (
-        <aside className="cmp-preview-banner" aria-labelledby="preview-banner-title">
-          <div className="cmp-preview-kicker" id="preview-banner-title">
-            Work in progress
-          </div>
-          <p>
-            This is an early preview intended to show the direction this project could take. It currently
-            includes only a few models, a limited selection of argumentation styles, and two example
-            scenarios that have not yet been fully validated. No statistically significant results or
-            conclusions are presented here yet, and several aspects of the results display still need
-            improvement.
-          </p>
-          <p>
-            For feedback—or to request internal access to experiment with scenario generation and
-            evaluation runs—feel free to contact{" "}
-            <a href="mailto:sam@polariscollective.org">sam@polariscollective.org</a>.
-          </p>
-          {researchDirectionUrl && (
-            <p>
-              <strong>More info:</strong>{" "}
-              <a href={researchDirectionUrl}>Information about the research direction</a>
-            </p>
-          )}
-        </aside>
-      )}
 
       {error && (
         <div className="card">
@@ -419,13 +470,117 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
                 <span className="cmp-verdict-count">
                   {v.crossedCount} of {v.attemptCount} attempts
                 </span>
-                {v.crossedStyles.length > 0 && (
-                  <span className="cmp-verdict-styles">
-                    under: {v.crossedStyles.map((s) => s.replace(/_/g, " ")).join(" · ")}
-                  </span>
-                )}
+                <span className="cmp-verdict-count">
+                  {v.crossedScenarioCount} of {v.scenarioCount}{" "}
+                  {v.scenarioCount === 1 ? "scenario" : "scenarios"}
+                </span>
+                <span className={`cmp-verdict-chained${v.chainedCrossedCount > 0 ? " crossed" : ""}`}>
+                  {v.chainedCount === 0
+                    ? "chained: not run"
+                    : `chained: ${v.chainedCrossedCount} of ${v.chainedCount} (${Math.round(
+                        (v.chainedCrossedCount / v.chainedCount) * 100
+                      )}%)`}
+                </span>
               </div>
             ))}
+          </section>
+
+          <section className="card cmp-heat" aria-label="Crossing rate by argument style and model">
+            <div className="cmp-heat-head">
+              <h2 className="cmp-verdicts-head">Which argument style moves which model</h2>
+              <div className="cmp-pipe-toggle" role="group" aria-label="What the heatmap measures">
+                {Object.values(HEAT_MODES).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`cmp-pipe-toggle-btn${heatMode === m.key ? " active" : ""}`}
+                    aria-pressed={heatMode === m.key}
+                    title={HEAT_MODE_NOTES[m.key]}
+                    onClick={() => setHeatMode(m.key)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="cmp-heat-lead">
+              Share of attempts that {HEAT_MODES[heatMode].measures}, as a mean of means: each
+              scenario first collapses to its own rate, then the cell averages those rates. Every
+              scenario counts once, however many times it was resampled.{" "}
+              {HEAT_MODE_NOTES[heatMode]}
+            </p>
+            <div className="cmp-table-scroll">
+              <table className="cmp-heat-table">
+                <thead>
+                  <tr>
+                    <th className="cmp-heat-style cmp-sticky"></th>
+                    {visibleModels.map((m) => (
+                      <th key={m} className="cmp-model-head">
+                        {modelLabel(m)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleStyles.map((style) => (
+                    <tr key={style}>
+                      <th scope="row" className="cmp-heat-style cmp-sticky">
+                        {style.replace(/_/g, " ")}
+                      </th>
+                      {visibleModels.map((model) => {
+                        const s = heat.get(`${model}|${style}`);
+                        if (!s) {
+                          return (
+                            <td key={model} className="cmp-heat-cell-wrap">
+                              <div
+                                className="cmp-heat-cell na"
+                                title={
+                                  heatMode === "plan_test"
+                                    ? "Never reached the test pretext here — the real framing was never refused, or nothing has been run."
+                                    : "Not run in this mode."
+                                }
+                              >
+                                n/a
+                              </div>
+                            </td>
+                          );
+                        }
+                        const pct = Math.round(s.rate * 100);
+                        return (
+                          <td key={model} className="cmp-heat-cell-wrap">
+                            <div
+                              className={`cmp-heat-cell heat-${heatStep(s.rate)}`}
+                              title={`${pct}% — ${HEAT_MODES[heatMode].measures} on ${s.hits} of ${s.attempts} attempts across ${s.scenarioCount} scenario${
+                                s.scenarioCount === 1 ? "" : "s"
+                              }`}
+                            >
+                              <span className="cmp-heat-pct">{pct}%</span>
+                              {/* The colour says nothing about how much
+                                  evidence is behind it: 1 of 1 and 6 of 6 are
+                                  the same red. The raw count rides along so a
+                                  100% that rests on a single attempt can't be
+                                  read as a settled result. */}
+                              <span className="cmp-heat-n">
+                                {s.hits}/{s.attempts}
+                              </span>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="cmp-heat-legend">
+              <span>{heatMode.startsWith("plan") ? "plan produced" : "crossed"}</span>
+              {HEAT_LEGEND.map((l) => (
+                <span key={l.step} className="cmp-heat-legend-item">
+                  <span className={`cmp-heat-swatch heat-${l.step}`} aria-hidden="true" />
+                  {l.label}
+                </span>
+              ))}
+            </div>
           </section>
 
           <section className="card cmp-controls">
@@ -434,7 +589,25 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
                 <StepBar depth={2} total={4} /> steps reached
               </span>
               <span className="cmp-key-item">
-                <span className="cmp-key-swatch" /> ⚠ crossed the critical step
+                <span className="cmp-key-ramp" aria-hidden="true">
+                  {[1, 2, 3, 4].map((n) => (
+                    <span key={n} className={`cmp-key-swatch heat-${n}`} />
+                  ))}
+                </span>
+                ⚠ crossed the critical step &mdash; deeper red = crossed on more of its attempts
+              </span>
+              {/* One item, so the two framings always read as a pair on the same
+                  line rather than wrapping apart. The full explanation of each
+                  is on the chip itself. */}
+              <span className="cmp-key-item">
+                <Note kind="R">
+                  <span className="cmp-framing-letter cmp-framing-real">R</span>
+                </Note>{" "}
+                plan written with the real goal and tools &middot;{" "}
+                <Note kind="T">
+                  <span className="cmp-framing-letter cmp-framing-test">T</span>
+                </Note>{" "}
+                only after both were softened into a test environment
               </span>
             </div>
             <label className="cmp-legend-group cmp-toggle">
@@ -531,10 +704,10 @@ export default function CompareGrid({ signedIn, researchDirectionUrl }) {
                   {canOpen && (
                     <button
                       type="button"
-                      className="cmp-scenario-trigger"
+                      className="cmp-scenario-view"
                       onClick={() => setDetailScenario({ id: scenario.id, title: scenario.title })}
                     >
-                      <span className="cmp-scenario-hint">Click here for more details</span>
+                      [View]
                     </button>
                   )}
                 </div>

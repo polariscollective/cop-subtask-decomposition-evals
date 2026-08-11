@@ -86,7 +86,12 @@ export async function GET() {
   // could serialise.
   const signedIn = Boolean(await getSessionEmail());
 
-  let query = supabase.from("runs").select("id, data, batch_id, user_email, is_public");
+  // Soft-deleted runs are out of the dataset for everyone, signed in or not —
+  // see the deleted_at column comment. The first use was the pre-fallback
+  // linear runs: they stopped at a real-framing refusal without ever trying
+  // the test pretext, so they could only ever report depth 0 and were
+  // dragging down a crossing rate they never had a chance to reach.
+  let query = supabase.from("runs").select("id, data, batch_id, user_email, is_public").is("deleted_at", null);
   if (!signedIn) query = query.eq("is_public", true);
   const { data: rows, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
