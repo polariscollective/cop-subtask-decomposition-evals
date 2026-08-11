@@ -1296,9 +1296,12 @@ pre.gen-yaml {
 }
 .cmp-verdict-row {
   display: grid;
-  grid-template-columns: 9rem auto 15rem 8rem 9rem 1fr;
+  /* model, one column per mode, then the scenario count. Fixed widths so the
+     header row and every data row land on the same gridlines — the four rates
+     are meant to be read down a column, not hunted for. */
+  grid-template-columns: 11rem repeat(4, 7rem) 6rem;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 7px 0;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
@@ -1585,8 +1588,14 @@ table.cmp-heat-table th, table.cmp-heat-table td { padding: 0; }
   background: var(--danger);
   color: #ffffff;
 }
+/* Depth stays blue even on a crossed cell — it's the same magnitude being
+   read, and turning it white made the bar mean one thing on light fills and
+   another on the dark one. The base #1c5cab can't be used here (1.1:1 against
+   #b3312c — two dark colours, invisible), so heat-4 gets a lightened step of
+   the same hue at 3.1:1, which clears the 3:1 floor for a graphic element.
+   Only the unreached segments go translucent white. */
 .cmp-pipe-cell.crossed.heat-4 .cmp-seg.on {
-  background: #ffffff;
+  background: #8fbcf0;
 }
 .cmp-pipe-cell.crossed.heat-4 .cmp-seg {
   background: rgba(255, 255, 255, 0.35);
@@ -1626,4 +1635,609 @@ table.cmp-heat-table th, table.cmp-heat-table td { padding: 0; }
 }
 .cmp-note:focus-visible {
   outline: 2px solid var(--accent);
+}
+
+/* A run id with a copy button. The id is the handle for talking about one
+   specific run, so it has to be one click to take, not a hand-selection out
+   of a dense row. Truncated visually — never in what gets copied. */
+.copy-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+.copy-id-value {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copy-id-btn {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.copy-id-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.copy-id-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The sample header keeps its own click target; the copy control sits beside
+   it in the same row, since a button cannot nest inside a button. */
+.rtm-sample-headrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 14px;
+  background: var(--page, var(--bg));
+}
+.rtm-sample-headrow .rtm-sample-head {
+  flex: 1;
+  min-width: 0;
+}
+
+/* One argument style's runs inside the transcript modal, with the style's own
+   rate above them — a plain mean, since within a style there is nothing left
+   to average over but its attempts. */
+.rtm-style-group + .rtm-style-group {
+  margin-top: 14px;
+}
+.rtm-style-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.rtm-style-name {
+  font-weight: 650;
+  font-size: 13px;
+}
+.rtm-style-rate {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.cmp-verdict-head {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.cmp-verdict-rate {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+.cmp-verdict-rate.none {
+  color: var(--muted);
+  font-weight: 400;
+  border-style: dashed;
+}
+
+/* Same ramp as the heatmap and the grid cells — one number, one scale,
+   read the same way everywhere on the page. */
+.cmp-verdict-rate.heat-1 { background: #fbecea; }
+.cmp-verdict-rate.heat-2 { background: #f0c4bd; }
+.cmp-verdict-rate.heat-3 { background: #dd8a7e; }
+.cmp-verdict-rate.heat-4 { background: #b3312c; color: #ffffff; }
+
+/* ---------------------------------------------------------------------------
+   Scenario families (/families)
+
+   A family is one hard case; scenarios are dressings of it. The page's job is to
+   make that hierarchy readable at a glance, so the family row carries the two
+   filters that decide usability (answer status as the section, harness fit as
+   a badge) and the counts that say whether it is coverage or a plan. Expanding
+   is where the prose goes — nothing in the collapsed row should need reading
+   twice.
+--------------------------------------------------------------------------- */
+.fam-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.fam-header .app-subtitle { max-width: 68ch; }
+
+.fam-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.fam-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 96px;
+}
+.fam-stat-value { font-size: 22px; font-weight: 680; line-height: 1.1; }
+.fam-stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+.fam-note {
+  margin-top: 18px;
+  max-width: 78ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.fam-note strong { color: var(--ink); font-weight: 650; }
+.fam-note-quiet {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.fam-section { margin-top: 34px; }
+.fam-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 15px;
+}
+.fam-section-count { font-size: 12px; color: var(--muted); font-weight: 500; }
+.fam-section-blurb {
+  margin: 6px 0 0;
+  max-width: 78ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.fam-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+
+.fam-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.fam-card.open { border-color: var(--accent); }
+
+.fam-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.fam-head:hover { background: var(--bg); }
+.fam-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.fam-caret {
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-left: 6px solid var(--muted);
+  border-top: 4.5px solid transparent;
+  border-bottom: 4.5px solid transparent;
+  transition: transform 120ms ease;
+}
+.fam-card.open .fam-caret { transform: rotate(90deg); border-left-color: var(--accent); }
+.fam-head-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.fam-label { font-weight: 640; }
+.fam-tradeoff { font-size: 12px; color: var(--muted); }
+.fam-head-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.fam-counts { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.fam-body {
+  padding: 4px 14px 14px 36px;
+  border-top: 1px solid var(--border);
+}
+.fam-desc {
+  margin: 12px 0 0;
+  max-width: 78ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.fam-meta {
+  margin: 8px 0 0;
+  max-width: 78ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.fam-meta strong { color: var(--ink); font-weight: 650; }
+
+.fam-scenarios { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.fam-scenario {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 9px 12px;
+  font: inherit;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.fam-scenario:hover { border-color: var(--accent); }
+.fam-scenario:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fam-scenario-title { font-size: 13px; font-weight: 600; }
+.fam-scenario-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.fam-empty, .fam-empty-inline {
+  font-size: 13px;
+  color: var(--muted);
+}
+.fam-empty { margin-top: 28px; }
+.fam-empty-inline { margin: 0; font-style: italic; }
+
+@media (max-width: 640px) {
+  .fam-head { align-items: flex-start; }
+  .fam-head-side { justify-content: flex-start; }
+  .fam-body { padding-left: 14px; }
+}
+
+
+/* Families parked as future work: listed, but visually demoted so the eye does
+   not read them as part of what is being measured. */
+.fam-parked { opacity: 0.72; }
+.fam-parked .fam-card { background: transparent; }
+.fam-parked:hover { opacity: 1; }
+
+/* The reason an out-of-scope family cannot be built, on its row. Only rendered
+   for those — everywhere else the badge is absent and there is nothing to
+   explain. */
+.fam-why {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin-top: 3px;
+  max-width: 70ch;
+}
+.fam-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Generator: the per-step legibility profile (F-11) and the variety pass (F-12). */
+.gen-leg { margin: 10px 0 12px; }
+.gen-leg-row { display: flex; align-items: flex-end; gap: 6px; height: 56px; }
+.gen-leg-bar {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: help;
+}
+.gen-leg-bar.critical { border-color: var(--danger); }
+.gen-leg-fill { display: block; width: 100%; background: var(--accent); opacity: 0.75; }
+.gen-leg-bar.critical .gen-leg-fill { background: var(--danger); }
+.gen-leg-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.gen-leg-caption { margin: 6px 0 0; }
+.gen-below-floor {
+  margin: 8px 0 10px;
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-radius: 6px;
+}
+.gen-variety {
+  margin: 18px 0;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.gen-variety-head { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
+.gen-variety-head p { max-width: 70ch; }
+.gen-variety-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.card.gen-picked { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+.card.gen-unpicked { opacity: 0.55; }
+
+/* Stored gradings, in the scenario detail modal. */
+.sdm-metrics-lead { margin: 0 0 10px; }
+.sdm-metrics {
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.sdm-metrics + .sdm-metrics { margin-top: 8px; }
+.sdm-metrics-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.sdm-dims { display: flex; flex-wrap: wrap; gap: 6px; }
+.sdm-dim {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 9px;
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sdm-dim:hover { border-color: var(--accent); }
+.sdm-dim.open { border-color: var(--accent); background: var(--ok-bg); }
+.sdm-dim.below { border-color: var(--danger); background: var(--danger-bg); }
+.sdm-dim:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sdm-dim-label { font-size: 11.5px; color: var(--muted); }
+.sdm-dim-score { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.sdm-leg { margin-top: 12px; }
+.sdm-leg-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sdm-leg-step {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 90px 22px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sdm-leg-step:hover { background: var(--surface); }
+.sdm-leg-step.open { background: var(--surface); border-color: var(--accent); }
+.sdm-leg-step:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sdm-leg-idx {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sdm-leg-tool {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sdm-leg-step.critical .sdm-leg-tool { color: var(--danger); }
+.sdm-leg-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.sdm-leg-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.8;
+}
+.sdm-leg-step.critical .sdm-leg-fill { background: var(--danger); }
+.sdm-leg-score {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sdm-leg-caption { margin: 8px 0 0; }
+/* The grading block follows the chain directly; without this its label sits
+   flush against the critical step's card and reads as part of it. */
+.sdm-steps + .field-label { display: block; margin-top: 22px; }
+
+/* The panel a dimension chip or a legibility bar opens: the verbatim question
+   the judge was given, then what it answered. Verbatim matters — a paraphrase
+   here would drift from the prompt without anyone noticing. */
+.sdm-explain {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+.sdm-explain-role {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.sdm-explain-label {
+  margin: 10px 0 3px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sdm-explain-label:first-of-type { margin-top: 0; }
+.sdm-explain-q, .sdm-explain-a {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.sdm-explain-q { color: var(--ink); }
+.sdm-explain-a { color: var(--muted); }
+
+/* "How a scenario is built" on /families. Collapsed by default — it is
+   orientation for a first-time reader, not something to scroll past daily. */
+.fam-how { margin-top: 18px; }
+.fam-how-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 620;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.fam-how-toggle:hover { border-color: var(--accent); }
+.fam-how-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fam-how.open .fam-how-toggle { border-color: var(--accent); border-radius: var(--radius) var(--radius) 0 0; }
+.fam-how.open .fam-caret { transform: rotate(90deg); border-left-color: var(--accent); }
+.fam-how-body {
+  padding: 14px 16px 16px;
+  border: 1px solid var(--accent);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface);
+}
+.fam-how-body p { margin: 0 0 10px; max-width: 76ch; font-size: 13px; line-height: 1.6; }
+.fam-how-label {
+  margin: 16px 0 6px !important;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fam-how-chain, .fam-how-steps { margin: 0 0 10px; padding-left: 20px; max-width: 76ch; }
+.fam-how-chain li, .fam-how-steps li { font-size: 13px; line-height: 1.6; margin-bottom: 5px; }
+.fam-how-chain li.critical { color: var(--danger); }
+.fam-how-chain li.critical .mono { color: var(--danger); }
+/* The five dimensions, nested inside the grading step. Set in a lighter colour
+   and tighter than its parent so the step reads as one item with a breakdown
+   rather than as five more steps in the pipeline. */
+.fam-how-dims { margin: 6px 0 0; padding-left: 18px; list-style: none; }
+.fam-how-dims li { font-size: 12.5px; line-height: 1.55; margin-bottom: 4px; color: var(--muted); }
+.fam-how-dims li strong { color: var(--text); font-weight: 600; }
+
+.fam-how-foot { color: var(--muted); font-size: 12.5px !important; margin-bottom: 0 !important; }
+
+/* A button that reads as a link: used where the action is navigation within a
+   panel rather than a command — following a scenario's lineage back to the
+   version a transcript was recorded against. Not a .btn: it sits mid-sentence
+   and must not break the line's rhythm. */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent, #4a7dff);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.btn-link:hover {
+  text-decoration: none;
+}
+
+/* A follow-on paragraph inside a numbered step, for a consequence that needs
+   its own breath without becoming another step in the pipeline. */
+.fam-how-inline { margin: 6px 0 0 !important; font-size: 12.5px !important; }
+
+/* The spread across repeated gradings, printed beside the median. Quieter than
+   the score: it qualifies the number, it is not a second number. */
+.sdm-dim-spread { color: var(--muted); font-size: 0.85em; font-weight: 400; }
+
+
+/* One line per pass in the expanded panel: same question every time, so only
+   the answers differ and they are what the reader is comparing. */
+.sdm-passes { margin: 4px 0 0; padding: 0; list-style: none; }
+.sdm-passes li { display: flex; gap: 8px; font-size: 12.5px; line-height: 1.55; margin-bottom: 4px; }
+.sdm-pass-score { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+.sdm-pass-why { color: var(--muted); }
+
+/* Scenario lineage. The one-line version stays in front of the reader; the
+   changelog behind it folds away — it runs to paragraphs and was pushing the
+   scenario's own description below the fold. */
+.sdm-lineage {
+  margin: 0 0 18px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+}
+.sdm-lineage-line { margin: 0; }
+.sdm-lineage-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  padding: 0;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.sdm-lineage-toggle:hover { color: var(--accent); }
+.sdm-lineage-toggle:hover .fam-caret { border-left-color: var(--accent); }
+.sdm-lineage-toggle[aria-expanded="true"] .fam-caret { transform: rotate(90deg); }
+.sdm-lineage-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sdm-lineage-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 76ch;
 }

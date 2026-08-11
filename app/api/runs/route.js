@@ -28,7 +28,7 @@ export async function GET(req) {
     const userEmail = await getSessionEmail();
     const { data: row, error } = await supabase
       .from("runs")
-      .select("data, style, user_email, is_public")
+      .select("data, style, user_email, is_public, scenario_id, ran_against_scenario_id")
       .eq("id", id)
       // A soft-deleted run is gone from the app, not just from the lists —
       // otherwise an id captured before the delete still opens its transcript.
@@ -55,6 +55,13 @@ export async function GET(req) {
     return NextResponse.json({
       ...row.data,
       style: row.style ?? row.data?.style ?? null,
+      // Both ids, because they can differ: scenario_id is the live scenario
+      // this run counts toward after a revision carried it over,
+      // ran_against_scenario_id is the version it actually executed against.
+      // A viewer shown the current spec next to an older transcript needs to
+      // be told, or the tool schemas in the transcript won't match the page.
+      scenario_id: row.scenario_id ?? row.data?.scenario_id ?? null,
+      ran_against_scenario_id: row.ran_against_scenario_id ?? row.data?.scenario_id ?? null,
       // Guarded on userEmail as well as the comparison: an anonymous caller
       // reading a batch row whose user_email is null would otherwise come out
       // as the owner (null === null).
@@ -66,7 +73,10 @@ export async function GET(req) {
   // the surface you load a run from to continue and overwrite it, so it must
   // only ever offer runs the caller actually owns. /runs and / pass nothing
   // and keep their existing team-wide visibility.
-  let query = supabase.from("runs").select("id, style, data, user_email").is("deleted_at", null);
+  let query = supabase
+    .from("runs")
+    .select("id, style, data, user_email, scenario_id, ran_against_scenario_id")
+    .is("deleted_at", null);
   // Resolved for every request, not just the scoped one: the team-wide list
   // still has to say which rows are the caller's, so /runs can offer "Open"
   // only where loading is actually allowed.
@@ -130,7 +140,10 @@ export async function GET(req) {
       return {
         id,
         saved_at: content.saved_at,
-        scenario_id: content.scenario_id,
+        // The live scenario, so the list groups and filters with the grid
+        // rather than stranding a carried-over cohort under its old id.
+        scenario_id: row.scenario_id ?? content.scenario_id,
+        ran_against_scenario_id: row.ran_against_scenario_id ?? content.scenario_id,
         scenario_title: content.scenario_title,
         framing: content.framing,
         // Root-level style recorded at save time: a single style key, "all"

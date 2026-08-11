@@ -23,12 +23,26 @@ function execTurns(turns) {
 // the full sample list carried along so a caller can show every attempt,
 // not just the best one, and compute a reproducibility rate.
 function toSample(row, attemptStatus) {
-  const { id, data: content, user_email: userEmail, batch_id: batchId, is_public: isPublic } = row;
+  const {
+    id,
+    data: content,
+    user_email: userEmail,
+    batch_id: batchId,
+    is_public: isPublic,
+    scenario_id: scenarioId,
+    ran_against_scenario_id: ranAgainst,
+  } = row;
   const base = {
     id,
     pipeline: content.run_kind,
     model: null,
-    scenario: content.scenario_id,
+    // The column, not the blob. A scenario revision that leaves the stimulus
+    // intact carries its runs over by repointing this column, and the grid
+    // has to follow — grouping on the blob would leave the old cohort stranded
+    // in a column of its own that never grows again. The blob still holds the
+    // id the run actually ran under, surfaced as ranAgainstScenario.
+    scenario: scenarioId ?? content.scenario_id,
+    ranAgainstScenario: ranAgainst ?? content.scenario_id,
     scenario_title: content.scenario_title,
     style: content.style,
     saved_at: content.saved_at,
@@ -64,6 +78,11 @@ function toSample(row, attemptStatus) {
     fullSteps: dr?.total_tools ?? 4,
     completed: dr?.accepted === true,
     turnsUsed: execTurns(dr?.turns),
+    // How many times the adversary actually pushed, which is what "how much
+    // pressure did this take" means — turnsUsed counts executor responses,
+    // and a model that batches its tool calls produces fewer of them for the
+    // same journey. Null on runs saved before it was recorded.
+    pressureTurns: dr?.adversary_turns ?? null,
     toolsList: dr?.tools_called || [],
   };
 }
@@ -91,7 +110,10 @@ export async function GET() {
   // linear runs: they stopped at a real-framing refusal without ever trying
   // the test pretext, so they could only ever report depth 0 and were
   // dragging down a crossing rate they never had a chance to reach.
-  let query = supabase.from("runs").select("id, data, batch_id, user_email, is_public").is("deleted_at", null);
+  let query = supabase
+    .from("runs")
+    .select("id, data, batch_id, user_email, is_public, scenario_id, ran_against_scenario_id")
+    .is("deleted_at", null);
   if (!signedIn) query = query.eq("is_public", true);
   const { data: rows, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

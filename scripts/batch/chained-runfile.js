@@ -4,6 +4,8 @@
 // happened without needing to know this conversation makes several calls
 // in sequence rather than one.
 import { getSupabaseClient } from "../../lib/supabase.js";
+import { providerForModel } from "../../lib/models.js";
+import { chainedToolSchemas } from "../../lib/chained.js";
 
 export function buildChainedRunFileContent({ batchId, scenario, attempt, result, systemPrompt, initialUserMessage }) {
   const toolsCalled = result.toolsCalled.length;
@@ -24,13 +26,27 @@ export function buildChainedRunFileContent({ batchId, scenario, attempt, result,
       turns: result.turns,
       messages: result.messages,
       argument_style: attempt.style,
-      provider: "anthropic",
+      // Resolved, not hardcoded: the dashboard repopulates its provider
+      // selector from this when a saved run is loaded and sends it back
+      // with the model on "Continue arguing", so a wrong value here routes
+      // a non-Anthropic model id to Anthropic's API.
+      provider: providerForModel(attempt.model),
       model: attempt.model,
       total_cost: result.cost,
       system_prompt: systemPrompt,
       initial_user_message: initialUserMessage,
       tools_called: result.toolsCalled,
       total_tools: totalTools,
+      // How many times the operator actually pushed. Not the same as the
+      // number of turns: a model that batches its tool calls clears several
+      // steps in one response and is pressed fewer times than one that goes
+      // tool by tool, so turn counts are not comparable across models with
+      // different calling habits and this is.
+      adversary_turns: result.adversaryTurns ?? null,
+      // The full schemas handed to the model on every turn. They travel in
+      // the API's own `tools` field, never in a message, so this is the
+      // only record of what it was shown.
+      tools: chainedToolSchemas(scenario),
     },
     plan_result: null,
     steps: null,

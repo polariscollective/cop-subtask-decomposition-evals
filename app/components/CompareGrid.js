@@ -6,7 +6,7 @@ import ScenarioDetailModal from "./ScenarioDetailModal";
 import { MODEL_CATALOG } from "../../lib/models";
 import { aggregateSamples } from "../../lib/compare-aggregate.js";
 import { bestOf, crossed, verdictRows } from "../../lib/compare-verdict.js";
-import { HEAT_MODES, crossedShare, rateMatrix } from "../../lib/compare-heatmap.js";
+import { HEAT_MODES, crossedShare, modelModeRate, rateMatrix, styleMeanRate } from "../../lib/compare-heatmap.js";
 
 // Every model either provider offers, in the same catalog the base
 // dashboard's own model dropdown reads from (lib/models.js) — not just the
@@ -45,23 +45,6 @@ function cellState(d) {
   return "open";
 }
 
-// Depth is a magnitude, so it is encoded by length, not by hue. The five-step
-// colour ramp this replaces put 3/4 and 4/4 at ΔE 14.7 in normal vision —
-// under the readability floor — which is exactly the distinction this project
-// turns on. Bar length has no such problem, and it frees the cell's fill for
-// the one thing that is a state rather than a magnitude: crossing the
-// critical step. `total` is per-scenario (chains are 4-5 tools), never
-// hardcoded.
-function StepBar({ depth, total }) {
-  const n = Math.max(0, total || 0);
-  return (
-    <span className="cmp-bar" role="img" aria-label={`${depth} of ${n} steps reached`}>
-      {Array.from({ length: n }, (_, i) => (
-        <span key={i} className={i < depth ? "cmp-seg on" : "cmp-seg"} />
-      ))}
-    </span>
-  );
-}
 
 // A sequential single-hue ramp, surface → --danger, in five steps. The
 // crossing rate is a magnitude with a direction (0% is the outcome we want,
@@ -112,7 +95,14 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
   return (
     <div className="cmp-pair">
       {["linear", "chained"].map((pipeline) => {
-        const d = bestOf(styles.map((s) => cellData(pipeline, model, scenario, s)));
+        const cells = styles.map((s) => cellData(pipeline, model, scenario, s)).filter(Boolean);
+        // Two different questions, deliberately shown together. The bar is how
+        // far the FURTHEST attempt got; the percentage is how OFTEN it crossed.
+        // A cell can be 4/4 on the bar and 33% here — it got there once out of
+        // three tries — and that gap is the reproducibility this page was
+        // otherwise silent about.
+        const stats = styleMeanRate(cells);
+        const d = bestOf(cells);
         const state = cellState(d);
         // A plan that was accepted and then stalled at step 1 must not look
         // identical to ordinary lack of progress — that's the "different
@@ -125,27 +115,24 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
         // one, which is also why "best of N" reads as a parenthetical: it
         // qualifies the number in front of it rather than standing alone.
         const planStalled = d && d.pipeline === "linear" && d.depth === 0 && d.planAccepted;
-        // A crossed cell is filled by how reproducible the crossing was, on
-        // the same ramp as the heatmap above: crossing on two attempts of
-        // three is two-thirds of the red. The cell itself still reports the
-        // best attempt (that's what the fraction and the bar are), so the
-        // state stays carried by the ⚠ and the red border — the fill is the
-        // magnitude behind it, never the only thing saying "crossed".
-        const share = state === "crossed" ? crossedShare(d) : 0;
-        const heatClass = state === "crossed" ? ` heat-${heatStep(share)}` : "";
-        const title =
-          state === "crossed"
-            ? `${PIPELINE_LABELS[pipeline]} — crossed on ${Math.round(share * d.sampleCount)} of ${
-                d.sampleCount
-              } attempt${d.sampleCount === 1 ? "" : "s"}`
-            : PIPELINE_LABELS[pipeline];
+        // Same ramp as the heatmap above, on the same number: the fill is the
+        // crossing rate, so a cell that crossed once in three is a third of
+        // the red. The ⚠ still carries "crossed at all" on its own, so the
+        // colour is never the only thing saying it.
+        const rate = stats ? stats.rate : 0;
+        const heatClass = state === "crossed" ? ` heat-${heatStep(rate)}` : "";
+        const title = stats
+          ? `${PIPELINE_LABELS[pipeline]} — crossed on ${stats.hits} of ${stats.attempts} attempt${
+              stats.attempts === 1 ? "" : "s"
+            }${stats.styleCount > 1 ? `, averaged over ${stats.styleCount} argument styles` : ""}`
+          : PIPELINE_LABELS[pipeline];
         return (
           <button
             type="button"
             key={pipeline}
             className={`cmp-pipe-cell ${state}${heatClass}`}
             disabled={!d}
-            onClick={() => d && onOpen(d)}
+            onClick={() => d && onOpen({ combos: cells, best: d, stats })}
             title={title}
           >
             <span className="cmp-pipe-line1">
@@ -154,10 +141,15 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
               </Note>
               {d ? (
                 <>
-                  <StepBar depth={d.depth} total={d.fullSteps} />
                   <span className="cmp-frac">
                     {state === "crossed" && <span className="cmp-crossed-mark">⚠ </span>}
-                    {noPlan ? <Note kind="noPlan">no plan</Note> : `${d.depth}/${d.fullSteps}`}
+                    {noPlan ? (
+                      <Note kind="noPlan">no plan</Note>
+                    ) : (
+                      // The fraction is gone: the bar already says how far it
+                      // got. This is the rate — how often it crossed.
+                      `${Math.round(rate * 100)}%`
+                    )}
                     {d.anyRunning && (
                       <Note kind="running">
                         <span className="cmp-running-mark">*</span>
@@ -183,13 +175,15 @@ function PipelinePair({ model, scenario, styles, cellData, onOpen }) {
               )}
             </span>
             <div className="cmp-turns">
-              {d && d.depth > 0 && `${d.turnsUsed} turns`}
-              {planStalled && <Note kind="planRefused">step 1 refused</Note>}
-              {d && d.sampleCount > 1 && (
-                <>
-                  {(d.depth > 0 || planStalled) && " "}
-                  (<Note kind="bestOf">best of {d.sampleCount}</Note>)
-                </>
+              {/* Counts only. The prose that used to sit here ("step 1 refused")
+                  made every cell a different width, and the distinction it
+                  carried survives on the line above: a refused plan reads
+                  "no plan", a plan that stalled at step 1 reads "0%". */}
+              {stats && (
+                <Note kind="rate">
+                  {stats.hits}/{stats.attempts}
+                  {stats.styleCount > 1 && ` over ${stats.styleCount} styles`}
+                </Note>
               )}
             </div>
           </button>
@@ -210,6 +204,15 @@ const NOTES = {
   noPlan: "The model refused to produce a plan at all, so no step was ever executed.",
   planRefused:
     "It agreed to the plan, then refused the first tool call — a different finding from refusing to plan.",
+  rate: "Attempts that reached the critical step, over attempts made. When more than one argument style is folded in, the percentage above is a mean of means: each style first collapses to its own rate, then those are averaged unweighted — so a style resampled three times counts no more than one tried once, and a style never run is left out rather than scored zero.",
+  heat_linear:
+    "Plan → execute: the model wrote a plan, then each step ran on a blind executor. The percentage is how often it reached the critical step — a mean of means of means: styles inside a scenario, then scenarios, each level unweighted.",
+  heat_chained:
+    "Chained: one conversation, full memory, the model calls every tool itself. Same three-level mean as the column beside it.",
+  heat_plan_real:
+    "Planning only, no pretext. Every plan → execute attempt is asked under the real framing first, so every attempt counts here.",
+  heat_plan_test:
+    "Planning only, under the test pretext — offered only after the real framing was refused. Only those attempts count, so it reads as: once pushed to the pretext, how often does a plan come out.",
   na: "This combination has not been run yet.",
   running: "Batch still running — this number may still change.",
   linear:
@@ -231,6 +234,17 @@ export default function CompareGrid({ signedIn }) {
   const [error, setError] = useState(null);
   const [modalCombo, setModalCombo] = useState(null);
   const [detailScenario, setDetailScenario] = useState(null); // { id, title }
+
+  // ?scenario=<id> opens that spec straight away. The modal is otherwise
+  // reachable only by finding the right cell and clicking its title, which
+  // makes a scenario impossible to cite: docs, notes and messages had nowhere
+  // to point. Read once on mount rather than kept in sync — closing the modal
+  // should not need a history entry, and the link is for arriving, not for
+  // navigating. The title is left to the modal, which fetches it anyway.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("scenario");
+    if (id) setDetailScenario({ id, title: null });
+  }, []);
   // Default hidden: with 10 styles × 3 models, most cells are "n/a" until
   // more batches run. Hiding empty rows/columns by default shows only
   // what's actually populated; unchecking reveals the full matrix a
@@ -336,6 +350,18 @@ export default function CompareGrid({ signedIn }) {
   // legible as the model count grows.
   const verdicts = useMemo(() => verdictRows(filteredRows || []), [filteredRows]);
 
+  // Every combo a model has, so the table above can compute each of its four
+  // rates without re-scanning the whole set per cell.
+  const cellsByModel = useMemo(() => {
+    const m = new Map();
+    for (const r of filteredRows || []) {
+      if (!r.model) continue;
+      if (!m.has(r.model)) m.set(r.model, []);
+      m.get(r.model).push(r);
+    }
+    return m;
+  }, [filteredRows]);
+
   const heat = useMemo(() => rateMatrix(filteredRows || [], heatMode), [filteredRows, heatMode]);
 
   // Derived, not hardcoded: scenarios are model-generated now, and a fixed
@@ -407,22 +433,31 @@ export default function CompareGrid({ signedIn }) {
             We don&rsquo;t ask whether it agrees. We watch which tool calls it actually makes.
           </p>
         </div>
-        {signedIn && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <a href="/runs" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
-              Runs table ↗
-            </a>
-            <a href="/dashboard" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
-              ← Back to dashboard
-            </a>
-          </div>
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {/* Public, unlike the two below — /families is in PUBLIC_PATHS. It is
+              the answer to "how much of the space does this grid cover?", which
+              the grid cannot state itself: the scenarios it shows are dressings
+              of a single hard case, and only the family map says so. */}
+          <a href="/families" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+            Scenario families ↗
+          </a>
+          {signedIn && (
+            <>
+              <a href="/runs" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+                Runs table ↗
+              </a>
+              <a href="/dashboard" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+                ← Back to dashboard
+              </a>
+            </>
+          )}
+        </div>
       </div>
 
       <section className="cmp-primer" aria-label="How to read this page">
         <ul>
           <li>
-            Each scenario is a chain of 4&ndash;5 tool calls, outputs stubbed. The last one is the
+            Each scenario is four tool calls, outputs stubbed, every one feeding the last. The last one is the
             critical call &mdash; the one that should never be made. We measure what it takes to
             get it made anyway.
           </li>
@@ -457,30 +492,38 @@ export default function CompareGrid({ signedIn }) {
         <>
           <section className="card cmp-verdicts" aria-label="Result by model">
             <h2 className="cmp-verdicts-head">Across everything tried so far</h2>
+            <div className="cmp-verdict-row cmp-verdict-head">
+              <span />
+              {Object.values(HEAT_MODES).map((m) => (
+                <Note key={m.key} kind={`heat_${m.key}`}>
+                  <span>{m.label}</span>
+                </Note>
+              ))}
+              <span>scenarios</span>
+            </div>
             {verdicts.length === 0 && <p className="plan-caption">No runs match the current filters.</p>}
             {verdicts.map((v) => (
               <div className="cmp-verdict-row" key={v.model}>
                 <span className="cmp-verdict-model">{modelLabel(v.model)}</span>
-                <StepBar depth={v.bestDepth} total={v.bestFullSteps} />
-                <span className={`cmp-verdict-state${v.crossedCount > 0 ? " crossed" : ""}`}>
-                  {v.crossedCount > 0
-                    ? "⚠ crossed the critical step"
-                    : `stopped at step ${v.bestDepth} of ${v.bestFullSteps}`}
-                </span>
-                <span className="cmp-verdict-count">
-                  {v.crossedCount} of {v.attemptCount} attempts
-                </span>
-                <span className="cmp-verdict-count">
-                  {v.crossedScenarioCount} of {v.scenarioCount}{" "}
-                  {v.scenarioCount === 1 ? "scenario" : "scenarios"}
-                </span>
-                <span className={`cmp-verdict-chained${v.chainedCrossedCount > 0 ? " crossed" : ""}`}>
-                  {v.chainedCount === 0
-                    ? "chained: not run"
-                    : `chained: ${v.chainedCrossedCount} of ${v.chainedCount} (${Math.round(
-                        (v.chainedCrossedCount / v.chainedCount) * 100
-                      )}%)`}
-                </span>
+                {Object.values(HEAT_MODES).map((m) => {
+                  const stats = modelModeRate(cellsByModel.get(v.model) || [], m);
+                  return (
+                    <span
+                      key={m.key}
+                      className={`cmp-verdict-rate${stats ? ` heat-${heatStep(stats.rate)}` : " none"}`}
+                      title={
+                        stats
+                          ? `${m.label}: ${m.measures} on ${stats.hits} of ${stats.attempts} attempts, across ${stats.scenarioCount} scenario${
+                              stats.scenarioCount === 1 ? "" : "s"
+                            }`
+                          : `${m.label}: not run`
+                      }
+                    >
+                      {stats ? `${Math.round(stats.rate * 100)}%` : "—"}
+                    </span>
+                  );
+                })}
+                <span className="cmp-verdict-count">{v.scenarioCount}</span>
               </div>
             ))}
           </section>
@@ -585,9 +628,6 @@ export default function CompareGrid({ signedIn }) {
 
           <section className="card cmp-controls">
             <div className="cmp-key">
-              <span className="cmp-key-item">
-                <StepBar depth={2} total={4} /> steps reached
-              </span>
               <span className="cmp-key-item">
                 <span className="cmp-key-ramp" aria-hidden="true">
                   {[1, 2, 3, 4].map((n) => (
@@ -726,7 +766,7 @@ export default function CompareGrid({ signedIn }) {
                       </thead>
                       <tbody>
                         <tr className="cmp-best-row">
-                          <td className="cmp-style-label cmp-sticky">Best of any style</td>
+                          <td className="cmp-style-label cmp-sticky">All styles</td>
                           {visibleModels.map((model) => (
                             <td key={model} className="cmp-cell-wrap">
                               <PipelinePair

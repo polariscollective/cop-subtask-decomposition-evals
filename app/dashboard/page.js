@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { MODEL_CATALOG, defaultModelFor } from "../../lib/models";
 import { resolveArgs } from "../../lib/placeholders";
 import { PromptViewer, AdversaryTurn, TurnBody, turnsCost } from "../components/ConversationView";
+import CopyId from "../components/CopyId";
 
 const ARGUMENT_STYLE_OPTIONS = [
   "all",
@@ -28,9 +29,12 @@ function describeType(val) {
 }
 
 function SchemaTree({ schema, depth = 0 }) {
+  // A tool that opens the chain declares no input at all, so this renders an
+  // empty (or, for a blob written before normalizeScenarioDoc backfilled it,
+  // an absent) schema rather than crashing on it.
   return (
     <>
-      {Object.entries(schema).map(([key, val]) => {
+      {Object.entries(schema || {}).map(([key, val]) => {
         const isObjArray = Array.isArray(val) && val.length && typeof val[0] === "object";
         return (
           <div key={key} style={{ paddingLeft: depth * 14 }}>
@@ -575,9 +579,7 @@ export default function Home() {
               {runsList.map((r) => (
                 <div key={r.id} className="run-row">
                   <div>
-                    <div className="mono" style={{ fontSize: 12.5 }}>
-                      {r.id}
-                    </div>
+                    <CopyId id={r.id} />
                     <div className="plan-caption" style={{ margin: "2px 0 0" }}>
                       {r.scenario_title} — {r.framing} — {r.style || "—"} — {r.mode}
                       {" — "}
@@ -815,6 +817,7 @@ export default function Home() {
           <PromptViewer
             systemPrompt={directResult.system_prompt}
             userMessage={directResult.initial_user_message}
+            tools={directResult.tools}
           />
 
           <div className="section-gap">
@@ -937,7 +940,7 @@ export default function Home() {
                 </span>
               </div>
               <TurnBody turns={s.turns} />
-              <PromptViewer systemPrompt={s.system_prompt} userMessage={s.initial_user_message} />
+              <PromptViewer systemPrompt={s.system_prompt} userMessage={s.initial_user_message} tools={s.tools} />
               {s.output && <div className="output-line">output: {JSON.stringify(s.output)}</div>}
               {i === steps.length - 1 && (
                 <div className="action-row" style={{ marginTop: 10 }}>

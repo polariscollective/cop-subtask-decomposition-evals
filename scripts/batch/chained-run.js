@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { runChainedToolSequence } from "../../lib/chained.js";
+import { runChainedToolSequence, buildChainedSystemPrompt } from "../../lib/chained.js";
 import { saveState } from "./chained-state.js";
 import { sumTurnsCost, wouldExceedBudget } from "./cost.js";
 import { buildChainedRunFileContent, writeRunFile } from "./chained-runfile.js";
@@ -23,7 +23,10 @@ async function runAttempt(attempt, { scenario, maxTurns, state, log }) {
         scenario,
         attempt,
         result: latestResult,
-        systemPrompt: undefined,
+        // Was undefined, which left every chained run with no record of the
+        // prompt it ran under — the same builder the loop itself uses, so
+        // the two cannot drift.
+        systemPrompt: buildChainedSystemPrompt(),
         initialUserMessage: goalText,
       })
     );

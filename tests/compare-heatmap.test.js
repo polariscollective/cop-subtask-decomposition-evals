@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HEAT_MODES, crossedShare, modeRate, rateMatrix } from "../lib/compare-heatmap.js";
+import { HEAT_MODES, crossedShare, modeRate, modelModeRate, rateMatrix, styleMeanRate } from "../lib/compare-heatmap.js";
 
 // A sample as /api/compare builds it, reduced to the fields these functions
 // read. depth === fullSteps is what crossed() tests.
@@ -171,4 +171,73 @@ test("crossedShare is the share of a combo's own attempts that crossed", () => {
   assert.equal(crossedShare(combo({ samples: [sample({ depth: 4 })] })), 1);
   assert.equal(crossedShare({ depth: 4, fullSteps: 4 }), 1);
   assert.equal(crossedShare(null), 0);
+});
+
+test("styleMeanRate averages styles, not samples", () => {
+  // One style crossed on 1 of 3, another on 1 of 1. Pooling every sample would
+  // give 2/4 = 50%; the mean of means is (1/3 + 1) / 2 = 66.7%. The
+  // heavily-resampled style must not outweigh the other.
+  const r = styleMeanRate([
+    { style: "ethical", samples: [sample({ depth: 4 }), sample({ depth: 1 }), sample({ depth: 2 })] },
+    { style: "legal", samples: [sample({ depth: 4 })] },
+  ]);
+  assert.equal(r.styleCount, 2);
+  assert.equal(r.attempts, 4);
+  assert.equal(r.hits, 2);
+  assert.ok(Math.abs(r.rate - 2 / 3) < 1e-9, `expected 2/3, got ${r.rate}`);
+});
+
+test("styleMeanRate leaves a style with no attempts out instead of scoring it zero", () => {
+  const r = styleMeanRate([
+    { style: "ethical", samples: [sample({ depth: 4 })] },
+    { style: "legal", samples: [] },
+  ]);
+  assert.equal(r.styleCount, 1);
+  assert.equal(r.rate, 1);
+});
+
+test("styleMeanRate on a single style is that style's own rate", () => {
+  const r = styleMeanRate([{ style: "ethical", samples: [sample({ depth: 4 }), sample({ depth: 2 })] }]);
+  assert.equal(r.rate, 0.5);
+});
+
+test("styleMeanRate returns null when nothing has data", () => {
+  assert.equal(styleMeanRate([]), null);
+  assert.equal(styleMeanRate([null, { style: "x", samples: [] }]), null);
+});
+
+test("modelModeRate averages styles inside a scenario, then scenarios", () => {
+  // s1: style A crossed 1/1, style B 0/3  -> scenario rate (1 + 0) / 2 = 0.5
+  // s2: style A crossed 0/1               -> scenario rate 0
+  // model = (0.5 + 0) / 2 = 0.25. Pooling all six attempts would give 1/6.
+  const r = modelModeRate(
+    [
+      { pipeline: "linear", scenario: "s1", style: "a", samples: [sample({ depth: 4 })] },
+      { pipeline: "linear", scenario: "s1", style: "b", samples: [sample(), sample(), sample()] },
+      { pipeline: "linear", scenario: "s2", style: "a", samples: [sample()] },
+    ],
+    HEAT_MODES.linear
+  );
+  assert.equal(r.scenarioCount, 2);
+  assert.equal(r.attempts, 5);
+  assert.equal(r.hits, 1);
+  assert.equal(r.rate, 0.25);
+});
+
+test("modelModeRate ignores the other pipeline's cells", () => {
+  const r = modelModeRate(
+    [
+      { pipeline: "linear", scenario: "s1", style: "a", samples: [sample({ depth: 4 })] },
+      { pipeline: "chained", scenario: "s1", style: "a", samples: [sample()] },
+    ],
+    HEAT_MODES.linear
+  );
+  assert.equal(r.rate, 1);
+  assert.equal(r.attempts, 1);
+});
+
+test("modelModeRate returns null when the mode has no eligible attempt", () => {
+  const cells = [{ pipeline: "linear", scenario: "s1", style: "a", samples: [sample({ planFraming: "real" })] }];
+  assert.equal(modelModeRate(cells, HEAT_MODES.plan_test), null);
+  assert.equal(modelModeRate([], HEAT_MODES.linear), null);
 });

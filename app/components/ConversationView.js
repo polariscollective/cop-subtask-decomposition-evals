@@ -5,9 +5,9 @@ import { useState } from "react";
 // Toggle showing the exact system + user (or initial user) prompt that
 // produced a result, verbatim — so any claim about "what the model saw"
 // can be checked directly instead of inferred.
-export function PromptViewer({ systemPrompt, userMessage, label = "View exact input prompt" }) {
+export function PromptViewer({ systemPrompt, userMessage, tools, label = "View exact input prompt" }) {
   const [open, setOpen] = useState(false);
-  if (!systemPrompt && !userMessage) return null;
+  if (!systemPrompt && !userMessage && !tools?.length) return null;
   return (
     <>
       <button className="btn btn-ghost" onClick={() => setOpen((v) => !v)} style={{ marginTop: 8 }}>
@@ -21,6 +21,28 @@ export function PromptViewer({ systemPrompt, userMessage, label = "View exact in
             {label.includes("adversary") ? "user prompt" : "initial user message"}
           </div>
           {userMessage || "(none)"}
+          {/* Tool schemas reach the model through the API's own `tools`
+              field, never as message text, so reading the prompt above
+              alone would understate what it was shown. The plan stage is
+              the one exception — it sends no tools and inlines the same
+              information into its system prompt — and correctly renders
+              nothing here. */}
+          {tools?.length > 0 && (
+            <>
+              <div className="io-label" style={{ marginTop: 12 }}>
+                tool definitions sent alongside this prompt ({tools.length})
+              </div>
+              {tools.map((t) => (
+                <div key={t.name} style={{ marginTop: 8 }}>
+                  {t.name}
+                  {"\n"}
+                  {t.description}
+                  {"\n"}
+                  {JSON.stringify(t.input_schema)}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </>

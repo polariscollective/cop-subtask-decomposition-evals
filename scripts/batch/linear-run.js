@@ -164,6 +164,12 @@ async function runChain(attempt, { scenario, maxTurns, state, log }) {
           total_cost: stepResult.cost,
           system_prompt: execSystemPrompt,
           initial_user_message: stepResult.messages[0]?.content ?? userMsg,
+          // The schema actually sent for this step. Unlike the plan stage,
+          // which inlines the tool list into its system prompt as text,
+          // here the description reaches the model only through the API's
+          // `tools` field — so nothing in system_prompt or the messages
+          // shows what it was told this tool does.
+          tools: [anthropicTool],
           tool: tool.name,
           args: resolvedArgs,
         });
