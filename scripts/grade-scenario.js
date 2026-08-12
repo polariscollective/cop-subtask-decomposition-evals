@@ -24,8 +24,6 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { buildJudgePrompt, parseJudgeVerdict } from "../lib/scenario-builder.js";
-import { buildBlindLegibilityPrompt, parseBlindLegibility, simulateBlindViews } from "../lib/blind-view.js";
 import {
   DEFAULT_GRADING_REPEATS,
   DEFAULT_THRESHOLD,
@@ -60,9 +58,12 @@ function loadEnvLocalOverriding(file) {
 loadEnvLocalOverriding(path.join(ROOT, ".env.local"));
 
 // Imported after the env is loaded: these read process.env at module scope.
-const { callModel } = await import("../lib/providers.js");
-const { costForCall, providerForModel } = await import("../lib/models.js");
+const { providerForModel } = await import("../lib/models.js");
 const { getSupabaseClient } = await import("../lib/supabase.js");
+// Both passes live in lib/grading.js, shared with scripts/generate-scenarios.js
+// so a candidate is admitted to the bank on the same measurement it is later
+// re-graded with.
+const { gradeOnce } = await import("../lib/grading.js");
 
 // Different model family from the generator on purpose — a judge that grades
 // its own family's writing is a self-preference confound the project cannot
@@ -80,56 +81,6 @@ function parseArgs(argv) {
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
-}
-
-async function gradeDimensions({ doc, judge, provider }) {
-  const response = await callModel({
-    provider,
-    model: judge,
-    systemPrompt: undefined,
-    messages: [{ role: "user", content: buildJudgePrompt(doc) }],
-    maxTokens: 1500,
-  });
-  const cost = costForCall({
-    provider,
-    model: judge,
-    inputTokens: response.usage.inputTokens,
-    outputTokens: response.usage.outputTokens,
-  });
-  return { verdict: parseJudgeVerdict(response.text), cost };
-}
-
-async function gradeLegibility({ doc, judge, provider }) {
-  const views = simulateBlindViews(doc);
-  // Concurrent: the steps are independent by construction, and each grader is
-  // shown only its own step.
-  const steps = await Promise.all(
-    views.map(async (view) => {
-      const response = await callModel({
-        provider,
-        model: judge,
-        systemPrompt: undefined,
-        messages: [{ role: "user", content: buildBlindLegibilityPrompt(view) }],
-        maxTokens: 400,
-      });
-      const cost = costForCall({
-        provider,
-        model: judge,
-        inputTokens: response.usage.inputTokens,
-        outputTokens: response.usage.outputTokens,
-      });
-      const parsed = parseBlindLegibility(response.text);
-      return {
-        step: view.step,
-        toolName: view.toolName,
-        score: parsed.score,
-        rationale: parsed.rationale,
-        error: parsed.error,
-        cost,
-      };
-    })
-  );
-  return { steps, cost: steps.reduce((n, s) => n + s.cost, 0) };
 }
 
 async function main() {
@@ -173,13 +124,10 @@ async function main() {
     // rate-limits mid-sweep would otherwise lose several at once.
     const gradings = [];
     for (let pass = 1; pass <= args.repeat; pass++) {
-      const [dims, leg] = await Promise.all([
-        gradeDimensions({ doc, judge: args.judge, provider }),
-        gradeLegibility({ doc, judge: args.judge, provider }),
-      ]);
-      const cost = dims.cost + leg.cost;
+      const grading = await gradeOnce({ doc, judge: args.judge, provider });
+      const { dims, leg, cost } = grading;
       total += cost;
-      gradings.push({ dimensions: dims.verdict.scores || {}, legibility: leg.steps, cost, dims, leg });
+      gradings.push(grading);
       console.log(
         `  pass ${pass}/${args.repeat}: ` +
           THRESHOLD_DIMENSIONS.map((k) => dims.verdict.scores?.[k]?.score ?? "?").join(" ") +

@@ -63,9 +63,14 @@ node scripts/batch-eval-chained.js --report my-run
 Common flags: `--batch-id`, `--models`, `--scenarios`, `--styles`,
 `--max-turns` (default 10), `--budget <dollars>`, `--yes`, `--dry-run`.
 
-Two more scripts:
+Three more scripts:
 
 ```bash
+# write scenarios for every family the harness can carry, and file the survivors
+node scripts/generate-scenarios.js --dry-run          # matrix and cost estimate
+RUN_AUTHOR_EMAIL=you@example.org node scripts/generate-scenarios.js \
+  --batch-id gen-1 --yes
+
 # grade a scenario already in the bank (see "How a scenario is graded")
 RUN_AUTHOR_EMAIL=you@example.org node scripts/grade-scenario.js \
   --scenarios single_point_of_command_v1
@@ -322,6 +327,15 @@ Scenarios live in Supabase — use `/scenarios`, not a file. Three ways in:
   until you click Save. The seed is prefilled from the family's description plus
   its `answer_basis`, the one sentence saying why the last step must not be
   taken.
+- **Sweep** (`scripts/generate-scenarios.js`) — the same pipeline over every
+  family `isRunnable()` accepts, unattended: N candidates each, graded, and the
+  survivors inserted with the gradings that admitted them. Two differences from
+  the screen, both from running unattended. Candidates within a family are
+  written in sequence, each told about its siblings, so three dressings of one
+  hard case do not come back as one written three times — the screen fires them
+  in parallel and cannot do that. And nothing it saves is published:
+  `is_public` defaults to false, so a candidate becomes visible only when
+  someone reads it and says so in SQL.
 
 ### What a candidate has to clear
 

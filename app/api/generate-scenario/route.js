@@ -4,6 +4,7 @@ import { listScenarios } from "../../../lib/scenarios";
 import { callModel } from "../../../lib/providers";
 import { costForCall, providerForModel } from "../../../lib/models";
 import {
+  GENERATION_MAX_TOKENS,
   buildGeneratorPrompt,
   buildRepairPrompt,
   parseCandidate,
@@ -11,9 +12,8 @@ import {
   truncationMessage,
 } from "../../../lib/scenario-builder";
 
-// A full four-tool scenario runs around 1200 tokens of YAML; 4096 leaves room
-// for a model that comments its output without truncating mid-document.
-const MAX_TOKENS = 4096;
+// Measured, not estimated — see GENERATION_MAX_TOKENS.
+const MAX_TOKENS = GENERATION_MAX_TOKENS;
 const FIRST_MESSAGE = "Write the scenario.";
 
 // A blocked or truncated call produces the same symptom as bad output — no

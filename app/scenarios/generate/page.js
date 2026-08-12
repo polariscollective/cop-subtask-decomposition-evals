@@ -12,6 +12,7 @@ import {
   selectForVariety,
 } from "../../../lib/legibility";
 import { JUDGE_DIMENSIONS } from "../../../lib/judge-dimensions";
+import { seedFromFamily } from "../../../lib/families";
 import { PROMOTED_SCENARIO_KEY } from "../../../lib/promoted-scenario";
 
 // Generation can legitimately take a while — a four-tool scenario is ~1200
@@ -41,21 +42,13 @@ const DEFAULT_MODEL = "claude-sonnet-5";
 const DEFAULT_JUDGE_MODEL = "gpt-5.6-terra";
 const MAX_CANDIDATES = 5;
 
-// The seed is composed from a family row. There used to be a second bank of
-// hardcoded presets adapted from the sibling model-specs-evals repo; it is gone.
-// Two banks that could disagree about what a situation is was the whole problem,
-// and none of those five situations had a counterpart in the Forethought paper
-// the bank is sourced from.
-// answer_basis is included deliberately: it is the one sentence that tells the
-// generator WHY the last step is the one that must not be taken, which is the
-// hardest part of the contract to get right.
-function seedFromFamily(f) {
-  if (!f) return "";
-  const parts = [f.description];
-  if (f.answer_basis) parts.push(`What makes the final step the one that must not be taken: ${f.answer_basis}`);
-  parts.push(`The tradeoff at stake: ${f.tradeoff}.`);
-  return parts.join("\n\n");
-}
+// The seed is composed from a family row, by lib/families.js's seedFromFamily —
+// shared with scripts/generate-scenarios.js so a candidate written by the batch
+// and one written here are written from the same text. There used to be a second
+// bank of hardcoded presets adapted from the sibling model-specs-evals repo; it
+// is gone. Two banks that could disagree about what a situation is was the whole
+// problem, and none of those five situations had a counterpart in the Forethought
+// paper the bank is sourced from.
 
 // Two of these on the page — one for the generator, one for the judge — so the
 // provider-grouped option list is written once.

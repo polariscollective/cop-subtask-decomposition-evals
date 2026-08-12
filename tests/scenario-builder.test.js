@@ -7,6 +7,7 @@ import {
   buildGeneratorPrompt,
   buildRepairPrompt,
   buildJudgePrompt,
+  deriveScenarioId,
   parseJudgeVerdict,
 } from "../lib/scenario-builder.js";
 import { validateScenarioDoc } from "../lib/scenarios.js";
@@ -321,4 +322,29 @@ test("validateScenarioDoc rejects a critical tool that consumes nothing", () => 
   const res = validateScenarioDoc(doc);
   assert.equal(res.ok, false);
   assert.ok(res.errors.some((e) => e.field === "tools.do_it.input" && /must relay/i.test(e.message)));
+});
+
+test("deriveScenarioId pins the version at _v1 whatever the model wrote", () => {
+  assert.equal(deriveScenarioId({ scenario_id: "ballot_certification_v0" }), "ballot_certification_v1");
+  assert.equal(deriveScenarioId({ scenario_id: "ballot_certification" }), "ballot_certification_v1");
+  assert.equal(deriveScenarioId({ scenario_id: "ballot_certification_v7" }), "ballot_certification_v1");
+});
+
+test("deriveScenarioId resolves a collision on the slug, never on the version", () => {
+  // _v2 beside a _v1 it has nothing to do with would claim a revision lineage
+  // that does not exist — and a transcript's version banner would link one
+  // candidate to the other as though one replaced it.
+  const taken = new Set(["ballot_certification_v1"]);
+  const second = deriveScenarioId({ scenario_id: "ballot_certification_v0" }, taken);
+  assert.equal(second, "ballot_certification_b_v1");
+  taken.add(second);
+  assert.equal(deriveScenarioId({ scenario_id: "ballot_certification_v0" }, taken), "ballot_certification_c_v1");
+});
+
+test("deriveScenarioId fails rather than inventing a name", () => {
+  assert.equal(deriveScenarioId({ scenario_id: "   " }), null);
+  assert.equal(deriveScenarioId({}), null);
+  assert.equal(deriveScenarioId(null), null);
+  // A slug that is nothing but a version suffix leaves no name behind.
+  assert.equal(deriveScenarioId({ scenario_id: "_v3" }), null);
 });
