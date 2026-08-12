@@ -89,18 +89,49 @@ exact list, as a set of exact strings — a prefix match let `/api/runsx` inheri
 Nothing in the app ever writes a publication flag. You publish by hand:
 
 ```sql
-update public.runs             set is_public = true where id = '<run-id>';
 update public.scenario_families set is_public = true where id = '<family-id>';
+update public.scenarios         set is_public = true where scenario_id = '<scenario-id>';
+update public.runs              set is_public = true where id = '<run-id>';
 ```
 
 Publishing a run exposes its **entire** stored blob — the free-text
 description and the full model transcripts, not only what the grid shows. Read
 it before you publish it.
 
-A family's publication governs its scenarios: publish the family and its
-scenarios become readable, run activity or not. Family descriptions paraphrase
-an unpublished Forethought draft, which is why the default is `false` and why
-it is a per-family decision.
+**Publication is a conjunction that descends.** Each level needs its own flag
+and every flag above it, and `lib/publication.js` is the only place that says
+so:
+
+| Visible signed out when |
+|---|
+| a **family** — its own `is_public` |
+| a **scenario** — its own `is_public` **and** its family's |
+| a **run** — its own `is_public` **and** both of its scenarios' **and** their family's |
+
+"Both of its scenarios" is `scenario_id` and `ran_against_scenario_id`. After a
+revision carries runs over those are different rows, and the transcript
+discloses the text of the one it actually executed against — so a run is
+published under both names or under neither. Two consequences worth knowing:
+
+- **`is_public` is read on soft-deleted scenarios.** Every run in the bank ran
+  against a retired `_v0` row. Reading retirement as unpublication would empty
+  the public grid completely, so the conjunction ignores `deleted_at` on the
+  scenario. Retirement governs what can still be *run*, which the database
+  trigger enforces separately.
+- **A revision must carry the flag forward.** Inserting `<id>_v2` without
+  copying `is_public` unpublishes the grid at the exact moment the runs are
+  carried over. It is step 2 of [Revising a scenario](#revising-a-scenario).
+
+Both defaults are `false`, for different reasons. A family's, because its
+description paraphrases an unpublished Forethought draft, so publishing one is a
+deliberate per-family decision. A scenario's, because scenarios arrive in bulk
+from the generator: without its own flag, a candidate would publish itself by
+landing in a family that is already public, unread.
+
+Publication used to flow the other way as well: a published run unlocked its
+scenario's full spec from below, family or no family. That is gone — under the
+conjunction a run cannot be public unless its scenario already is, so the unlock
+could never fire again.
 
 Two fields stay behind sign-in even on a published family: `source`, which
 points at that draft by section, and `harness_note`, which is internal working
@@ -185,18 +216,37 @@ Everything is in Supabase; nothing of record lives on disk.
 `dynamic = "force-dynamic"` does not cover that — it opts the *route* out of
 static rendering, not the fetch underneath.
 
-**The schema is not in this repo.** There is no `supabase/` directory and no
-migrations folder. Every table was created by applying SQL straight to the
-remote project, so the only record of the schema is Supabase's own migration
-history (20 entries as of 12 August 2026, from `create_runs_and_batches` to
-`metrics_track_graded_text`). Read it with `list_migrations`, or read the tables
-themselves.
+#### The schema
 
-That is a real gap, not a design choice. Nobody can stand a fresh project up
-from this repo, a schema change leaves no trace in code review, and the
-comments explaining *why* a column exists live in the migration that created it
-rather than anywhere you would look. Dumping the schema into `supabase/` and
-committing it would fix all three.
+Every table was originally created by applying SQL straight to the remote
+project, which left an entry in Supabase's own migration history and no file
+here. Those twenty entries have since been recovered into
+`supabase/migrations/`, verified byte-for-byte against the remote, so
+`supabase migration list --linked` matches 20/20 and `supabase db push` reports
+nothing pending.
+
+```bash
+supabase migration list --linked   # local vs remote, should match
+supabase db push --dry-run         # what would be applied
+```
+
+`supabase/schema.sql` is a flattened snapshot of the `public` schema for
+reading — every table, index, function, trigger, grant and comment in one
+place. It is **not** the source of truth and it does not regenerate itself.
+Change the schema by writing a migration.
+
+Two things in it are worth knowing before you assume a fresh project behaves
+the same way:
+
+- **RLS is enabled on every table with zero policies.** That denies everything
+  to `anon` and `authenticated`. The app works because it connects with the
+  service-role key, which bypasses RLS entirely — so access control rests on
+  the secrecy of that key plus the app's own checks (`lib/public-paths.js`, and
+  the publication filters in `/api/compare`, `/api/families`,
+  `/api/scenario-detail`). A leaked key has no net beneath it.
+- **No migration enabled that RLS.** An event trigger, `ensure_rls`, fires on
+  every `CREATE TABLE` in `public` and turns it on. It came with the project,
+  not with this code.
 
 ### Running a batch from the app
 
@@ -356,10 +406,13 @@ record of what a model was shown, and changing the definition under them makes
 every transcript disagree with the page describing it. Revise by replacing:
 
 1. Insert a new row (`<id>_v1`, `_v2`, …) with the corrected doc.
-2. Set `supersedes` on it to the old `scenario_id`, plus `revised_at` and a
+2. Copy `is_public` from the row it replaces. `is_public` defaults to `false`,
+   so a revision of a published scenario that forgets this unpublishes the grid
+   at the exact moment step 4 carries the runs over.
+3. Set `supersedes` on it to the old `scenario_id`, plus `revised_at` and a
    `revision_note` saying what changed **and whether the old runs were carried
    over**.
-3. Soft-delete the old row. It leaves the pickers but stays readable —
+4. Soft-delete the old row. It leaves the pickers but stays readable —
    `/api/scenario-detail` deliberately does not filter `deleted_at`, because it
    is the definition an older run actually saw.
 4. Carry the runs over *only if the revision left the stimulus intact*, by

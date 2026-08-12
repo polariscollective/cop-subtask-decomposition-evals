@@ -20,13 +20,17 @@ function family(over = {}) {
   };
 }
 
-// A scenarios row, likewise.
+// A scenarios row, likewise. Published by default so each test states the one
+// flag it is about — the column itself defaults to false in the database, which
+// is what keeps a generated candidate from publishing itself by landing in a
+// family that is already public.
 function scenario(over = {}) {
   return {
     scenario_id: "s1",
     title: "Scenario one",
     family_id: "f1",
     data: { tools: [{}, {}, {}, {}], critical_tool: "migrate" },
+    is_public: true,
     deleted_at: null,
     ...over,
   };
@@ -105,9 +109,9 @@ test("a soft-deleted family is out for everyone", () => {
 });
 
 test("signed out: a scenario under an unpublished family is not listed AND not counted", () => {
-  // Publication is a property of the family. The count is the part that
-  // matters: listing nothing while still counting it would turn scenarioCount
-  // into a side channel reporting how much unpublished work exists.
+  // The family half of the conjunction. The count is the part that matters:
+  // listing nothing while still counting it would turn scenarioCount into a
+  // side channel reporting how much unpublished work exists.
   const view = buildFamilyView({
     families: [family({ id: "pub", is_public: true }), family({ id: "priv", is_public: false })],
     scenarios: [
@@ -129,6 +133,39 @@ test("signed out: a scenario under an unpublished family is not listed AND not c
   assert.equal(f.scenarioCount, 1);
   assert.equal(f.runCount, 3);
   assert.equal(view.totals.scenarioCount, 1);
+});
+
+test("signed out: an unpublished scenario under a published family is not listed AND not counted", () => {
+  // The scenario half, and the reason the column exists: a generated candidate
+  // lands in a family that is already public and must stay invisible until
+  // someone reads it and publishes it by hand. Same side-channel rule as above
+  // — hiding the row while still counting it would report how many candidates
+  // are sitting unread.
+  const view = buildFamilyView({
+    families: [family({ id: "pub", is_public: true })],
+    scenarios: [
+      scenario({ scenario_id: "shown", family_id: "pub" }),
+      scenario({ scenario_id: "candidate", family_id: "pub", is_public: false }),
+    ],
+    runCountsByScenario: { shown: 3, candidate: 9 },
+    signedIn: false,
+  });
+  const [f] = view.families;
+  assert.deepEqual(
+    f.scenarios.map((s) => s.scenario_id),
+    ["shown"]
+  );
+  assert.equal(f.scenarioCount, 1);
+  assert.equal(f.runCount, 3);
+});
+
+test("signed in: an unpublished scenario is listed like any other", () => {
+  const view = buildFamilyView({
+    families: [family({ id: "pub", is_public: true })],
+    scenarios: [scenario({ scenario_id: "candidate", family_id: "pub", is_public: false })],
+    signedIn: true,
+  });
+  assert.equal(view.families[0].scenarioCount, 1);
 });
 
 test("signed out: a published family lists its scenarios even with no runs yet", () => {

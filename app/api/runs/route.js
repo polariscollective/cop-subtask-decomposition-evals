@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ARGUMENT_STYLES } from "../../../lib/adversarial";
 import { getSupabaseClient } from "../../../lib/supabase.js";
 import { getSessionEmail } from "../../../auth";
+import { publicScenarioIds, runIsPublic } from "../../../lib/publication.js";
 
 // Same fixed priority order the batch runner uses to pick which accepted
 // style becomes the canonical branch that continues to the next step
@@ -9,6 +10,20 @@ import { getSessionEmail } from "../../../auth";
 // pickCanonical. Needed here to reconstruct, from saved rows alone, which
 // row at a given step was the one anything downstream branched from.
 const STYLE_PRIORITY = Object.keys(ARGUMENT_STYLES);
+
+// Resolved only for anonymous callers, and only for the single row being
+// served. Both tables are small (5 and 25 rows), and neither filters deleted_at
+// on the scenario side: every run in the bank ran against a retired _v0 row, so
+// reading retirement as unpublication would 404 every transcript on the public
+// grid. Fails closed on a query error.
+async function runIsPubliclyReadable(supabase, row) {
+  const [{ data: scenarios, error }, { data: families, error: familyError }] = await Promise.all([
+    supabase.from("scenarios").select("scenario_id, family_id, is_public"),
+    supabase.from("scenario_families").select("id, is_public, deleted_at"),
+  ]);
+  if (error || familyError) return false;
+  return runIsPublic(row, publicScenarioIds(scenarios || [], families || []));
+}
 
 // GET /api/runs         -> list of saved runs (lightweight summaries)
 // GET /api/runs?id=<id> -> full content of one saved run
@@ -37,11 +52,16 @@ export async function GET(req) {
     if (error || !row) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
-    // Anonymous readers exist only because / is public. They may read
-    // a transcript, but only of a published run — and an unpublished id gets
-    // the same 404 as a missing one, so the response never confirms that an
-    // id it was handed actually exists.
-    if (!userEmail && !row.is_public) {
+    // Anonymous readers exist only because / is public. They may read a
+    // transcript, but only of a run published under the whole conjunction: its
+    // own flag, both of its scenarios, and their family. The run's flag alone is
+    // not enough here of all places — the transcript carries the tool schemas
+    // and descriptions of the version it executed against, verbatim, so serving
+    // it publishes that scenario's text whatever the scenario row says.
+    //
+    // An unpublished id gets the same 404 as a missing one, so the response
+    // never confirms that an id it was handed actually exists.
+    if (!userEmail && !(await runIsPubliclyReadable(supabase, row))) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     // The root style column rides along with the run content: it's the only

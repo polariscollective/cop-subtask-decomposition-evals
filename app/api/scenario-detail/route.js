@@ -2,58 +2,39 @@ import { NextResponse } from "next/server";
 import { normalizeScenarioDoc, validateScenarioDoc } from "../../../lib/scenarios";
 import { getSessionEmail } from "../../../auth";
 import { getSupabaseClient } from "../../../lib/supabase.js";
-import { isAllowedEmail } from "../../../lib/allowed-email.js";
+import { scenarioIsPublic } from "../../../lib/publication.js";
 
-// Publication is a property of the family: a public family publishes its whole
-// dressing set, run activity or not — the same rule /api/families lists them
-// by (see buildFamilyView). Without this, a scenario that page now shows would
-// 404 the moment a reader clicked it. Fails closed: a query error, a missing
-// scenario, a scenario in no family, or a soft-deleted family all return false.
-async function belongsToPublicFamily(supabase, scenarioId) {
+// Publication is a conjunction: the scenario's own flag AND its family's — the
+// same rule /api/families lists them by (see buildFamilyView). Without this, a
+// scenario that page shows would 404 the moment a reader clicked it. Fails
+// closed: a query error, a missing scenario, a scenario in no family, or a
+// soft-deleted family all return false.
+//
+// There used to be a second way in, hasPublicRun: a published run pointing at
+// this scenario unlocked its full spec, family published or not. That was
+// publication flowing UPWARD, decided by whoever published a run rather than by
+// whoever published the scenario. Under the conjunction a run cannot be public
+// unless this scenario already is, so the unlock could never fire again — it is
+// gone rather than adapted, and this endpoint has one way in instead of two.
+//
+// deleted_at is filtered on the family but deliberately NOT on the scenario: a
+// superseded row is the definition an older run actually saw, and it is exactly
+// the page a transcript's version banner links to.
+async function isPubliclyReadable(supabase, scenarioId) {
   const { data: scenario, error } = await supabase
     .from("scenarios")
-    .select("family_id")
+    .select("is_public, family_id")
     .eq("scenario_id", scenarioId)
     .maybeSingle();
   if (error || !scenario?.family_id) return false;
 
   const { data: family, error: familyError } = await supabase
     .from("scenario_families")
-    .select("is_public")
+    .select("is_public, deleted_at")
     .eq("id", scenario.family_id)
-    .is("deleted_at", null)
     .maybeSingle();
-  return !familyError && family?.is_public === true;
-}
-
-// The pre-existing unlock, unchanged: a scenario the public grid shows results
-// for stays readable even if its family is unpublished or it has none.
-// Mirrors /api/compare's inclusion rule on every axis it checks — not just
-// "published": a published run from a non-allowlisted account (e.g. a QA
-// account like reviewer-verify@example.com), or one whose blob has no
-// recognized run_kind (e.g. a manually-saved run — see
-// app/api/save-run/route.js, which never sets run_kind; only the batch scripts
-// do), never appears in that grid, so it must not unlock a spec here either.
-async function hasPublicRun(supabase, scenarioId) {
-  const { data: candidates, error } = await supabase
-    .from("runs")
-    .select("data, user_email")
-    // Either column unlocks the spec. After a revision carries runs over,
-    // scenario_id names the live row, so the superseded one would 404 — and
-    // that is exactly the page a version banner links to from a transcript
-    // recorded against it. A run published under one is published under both;
-    // they are two names for the same run.
-    .or(`scenario_id.eq.${scenarioId},ran_against_scenario_id.eq.${scenarioId}`)
-    .eq("is_public", true)
-    // A soft-deleted run no longer appears in the public grid, so it must not
-    // unlock this scenario's spec either.
-    .is("deleted_at", null);
-  if (error) return false;
-  return (candidates || []).some(
-    (r) =>
-      isAllowedEmail(r.user_email) &&
-      (r.data?.run_kind === "linear" || r.data?.run_kind === "chained")
-  );
+  if (familyError) return false;
+  return scenarioIsPublic(scenario, family);
 }
 
 export async function GET(req) {
@@ -65,21 +46,16 @@ export async function GET(req) {
 
   const supabase = getSupabaseClient();
 
-  // Anonymous readers reach this from two public surfaces: the root /'s grid,
-  // where a result's scenario title opens its spec, and /families, which lists
-  // every scenario of every published family. Either origin unlocks the spec,
-  // and nothing else does — otherwise a scenario belonging to no published
-  // family, with nothing published against it, would be readable by guessing
-  // its id. Same 404 whichever way it fails, so the response never
-  // distinguishes "unpublished" from "does not exist".
+  // Anonymous readers reach this from two public surfaces — the root /'s grid,
+  // where a result's scenario title opens its spec, and /families — but both
+  // now pass the same test, because a run can only be on that grid if this
+  // scenario is published. Nothing else unlocks it: a scenario belonging to no
+  // published family is not readable by guessing its id. Same 404 whichever way
+  // it fails, so the response never distinguishes "unpublished" from "does not
+  // exist".
   const userEmail = await getSessionEmail();
-  if (!userEmail) {
-    const allowed =
-      (await belongsToPublicFamily(supabase, scenarioId)) ||
-      (await hasPublicRun(supabase, scenarioId));
-    if (!allowed) {
-      return NextResponse.json({ error: `Scenario not found: ${scenarioId}` }, { status: 404 });
-    }
+  if (!userEmail && !(await isPubliclyReadable(supabase, scenarioId))) {
+    return NextResponse.json({ error: `Scenario not found: ${scenarioId}` }, { status: 404 });
   }
 
   // Deliberately not filtered on deleted_at: a superseded scenario has to

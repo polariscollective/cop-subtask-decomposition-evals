@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseClient } from "../../../lib/supabase.js";
 import { isAllowedEmail } from "../../../lib/allowed-email.js";
 import { aggregateSamples } from "../../../lib/compare-aggregate.js";
+import { publicScenarioIds, runIsPublic } from "../../../lib/publication.js";
 import { getSessionEmail } from "../../../auth";
 
 // GET() here takes no request-dependent input (no searchParams/cookies/
@@ -118,8 +119,34 @@ export async function GET() {
   const { data: rows, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // A published run is not enough: both of its scenarios must be published too,
+  // and so must their family (lib/publication.js). The two small tables are
+  // fetched whole — 5 and 25 rows — rather than joined per run.
+  //
+  // Unlike the run's own flag this half cannot go into the query. It spans two
+  // columns, and a null ran_against_scenario_id means "never moved", which
+  // stands for the live id — an `.in()` would read that null as no match and
+  // silently drop any row predating the column. So it is applied below, before
+  // anything is serialised.
+  let publicIds = null;
+  if (!signedIn) {
+    const [{ data: scenarios, error: scenarioError }, { data: families, error: familyError }] = await Promise.all([
+      // deleted_at deliberately not filtered: every run in the bank ran against
+      // a retired _v0 row, and treating retirement as unpublication would empty
+      // this grid completely.
+      supabase.from("scenarios").select("scenario_id, family_id, is_public"),
+      supabase.from("scenario_families").select("id, is_public, deleted_at"),
+    ]);
+    if (scenarioError) return NextResponse.json({ error: scenarioError.message }, { status: 500 });
+    if (familyError) return NextResponse.json({ error: familyError.message }, { status: 500 });
+    publicIds = publicScenarioIds(scenarios || [], families || []);
+  }
+
   const relevant = (rows || []).filter(
-    (r) => (r.data?.run_kind === "linear" || r.data?.run_kind === "chained") && isAllowedEmail(r.user_email)
+    (r) =>
+      (r.data?.run_kind === "linear" || r.data?.run_kind === "chained") &&
+      isAllowedEmail(r.user_email) &&
+      (!publicIds || runIsPublic(r, publicIds))
   );
 
   const excluded = (rows || []).filter(

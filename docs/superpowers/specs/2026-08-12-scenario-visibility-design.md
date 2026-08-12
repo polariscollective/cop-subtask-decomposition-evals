@@ -100,13 +100,12 @@ becomes `scenarioIsPublic(...)`. The scenario lookup must not filter
 `deleted_at`; it already doesn't, for the reason in the second trap.
 
 **`/api/compare`** — needs the scenario and family tables, which it does not
-read today. Both are small (5 and 25 rows). Compute `publicScenarioIds` first,
-then keep the existing query-level discipline by adding
-`.in("scenario_id", ids)` alongside `.eq("is_public", true)`, so an
-unpublishable run is never loaded into a response this request could serialise.
-`ran_against_scenario_id` is checked after the fetch — two `.in()` filters
-cannot express "null falls back to `scenario_id`", which is what a row predating
-that column means.
+read today. Both are small (5 and 25 rows), fetched whole. The run's own flag
+stays in the query, where it is today; the scenario half is applied to the
+fetched rows instead of as an `.in()`, because it spans two columns and a null
+`ran_against_scenario_id` means "never moved" and stands for the live id — an
+`.in()` reads that null as no match and would silently drop any row predating
+the column. It still runs before anything is serialised.
 
 **`/api/runs?id=`** — the anonymous guard becomes a single `runIsPublic(...)`,
 which already carries the run's own flag. Same 404 as today whichever condition
