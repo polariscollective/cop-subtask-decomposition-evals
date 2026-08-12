@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildFamilyView, isRunnable, summarise } from "../lib/families.js";
+import { buildFamilyView, inReview, isRunnable, summarise } from "../lib/families.js";
 
 // A scenario_families row, reduced to the fields buildFamilyView reads.
 function family(over = {}) {
@@ -281,4 +281,26 @@ test("toolCount is read off the scenario doc, and survives a missing tools array
   const byId = Object.fromEntries(view.families[0].scenarios.map((s) => [s.scenario_id, s]));
   assert.equal(byId.ok.toolCount, 4);
   assert.equal(byId.bare.toolCount, null);
+});
+
+test("inReview follows the visitor's own run count", () => {
+  // Derived from the number the row prints, so the badge can never contradict
+  // it. For a signed-out visitor that count is published runs only.
+  assert.equal(inReview({ scenario_id: "s", runCount: 0 }), true);
+  assert.equal(inReview({ scenario_id: "s", runCount: 3 }), false);
+  assert.equal(inReview({ scenario_id: "s" }), true);
+  assert.equal(inReview(null), true);
+});
+
+test("a published scenario with no runs is listed, and reads as in review", () => {
+  // Publication and run activity are independent: the bank is published so it
+  // can be read, and most of it has nothing run against it yet.
+  const view = buildFamilyView({
+    families: [family({ id: "pub", is_public: true })],
+    scenarios: [scenario({ scenario_id: "fresh", family_id: "pub" })],
+    signedIn: false,
+  });
+  const [s] = view.families[0].scenarios;
+  assert.equal(s.runCount, 0);
+  assert.equal(inReview(s), true);
 });

@@ -127,6 +127,13 @@ published under both names or under neither. Two consequences worth knowing:
   copying `is_public` unpublishes the grid at the exact moment the runs are
   carried over. It is step 2 of [Revising a scenario](#revising-a-scenario).
 
+Publication and run activity stay independent, and the page says which is which:
+a published scenario with no runs the visitor can see is badged **In review** on
+`/families` and carries the same note above its spec. It is published so the
+bank can be read, graded against the five dimensions and the legibility ceiling
+— and nothing has been run against it, so there is no evidence on that page
+about how any model behaves on it.
+
 Both defaults are `false`, for different reasons. A family's, because its
 description paraphrases an unpublished Forethought draft, so publishing one is a
 deliberate per-family decision. A scenario's, because scenarios arrive in bulk

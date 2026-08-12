@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { JUDGE_DIMENSIONS } from "../../lib/judge-dimensions.js";
+import { IN_REVIEW_BLURB, IN_REVIEW_LABEL } from "../../lib/families.js";
 import {
   LEGIBILITY_SCALE,
   THRESHOLD_DIMENSIONS,
@@ -375,7 +376,7 @@ function Explainer({ open, m, steps, rows }) {
 // 3, … with the last one flagged — because that ordering is the whole
 // measurement, and a flat list of tool cards (what this used to be, and what
 // the manual dashboard still shows inline) hides it.
-export default function ScenarioDetailModal({ scenarioId, scenarioTitle, onClose }) {
+export default function ScenarioDetailModal({ scenarioId, scenarioTitle, inReview = false, onClose }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
   // Which version of the lineage is on screen. Starts at whatever opened the
@@ -450,6 +451,19 @@ export default function ScenarioDetailModal({ scenarioId, scenarioTitle, onClose
         <div className="rtm-body">
           {error && <p style={{ color: "var(--danger)" }}>Failed to load: {error}</p>}
           {!detail && !error && <p className="plan-caption">Loading…</p>}
+
+          {/* Above the spec, not below it: a reader who scrolls the four tools
+              and the judge scores can come away thinking the scores are
+              results. They are not — they grade the instrument, and nothing has
+              been measured with it yet. Shown only for the version that was
+              opened, since following the lineage lands on a retired row whose
+              run count this component was never told. */}
+          {detail && inReview && viewingId === scenarioId && (
+            <div className="sdm-review-note">
+              <span className="badge badge-neutral">{IN_REVIEW_LABEL}</span>
+              <p>{IN_REVIEW_BLURB}</p>
+            </div>
+          )}
 
           {detail && <LineageBanner detail={detail} onView={setViewingId} />}
 

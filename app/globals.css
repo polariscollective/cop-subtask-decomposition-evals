@@ -414,6 +414,26 @@ input:focus-visible {
 .sdm-panel > .field-label {
   margin-bottom: 2px;
 }
+/* Sits above the spec, so a reader meets the caveat before the judge scores
+   rather than after them. Neutral rather than a warning colour: nothing is
+   wrong with the scenario, there is simply nothing measured with it yet. */
+.sdm-review-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: var(--panel, #f7f7f5);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.sdm-review-note p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 80ch;
+}
 .sdm-chain-lead {
   font-size: 12.5px;
   line-height: 1.6;

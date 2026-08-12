@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import ScenarioDetailModal from "./ScenarioDetailModal";
-import { ANSWER_STATUS, ANSWER_STATUS_ORDER, answerStatusMeta, harnessFitMeta } from "../../lib/families.js";
+import {
+  ANSWER_STATUS,
+  ANSWER_STATUS_ORDER,
+  IN_REVIEW_BLURB,
+  IN_REVIEW_LABEL,
+  answerStatusMeta,
+  harnessFitMeta,
+  inReview,
+} from "../../lib/families.js";
 
 export default function FamiliesList({ signedIn }) {
   const [data, setData] = useState(null);
@@ -195,6 +203,11 @@ export default function FamiliesList({ signedIn }) {
         <ScenarioDetailModal
           scenarioId={viewing.scenario_id}
           scenarioTitle={viewing.title}
+          // Carried in rather than fetched: this page already knows how many
+          // runs the visitor may see, and the modal is also opened from the
+          // results grid, where every scenario has runs by construction and the
+          // question never arises.
+          inReview={inReview(viewing)}
           onClose={closeScenario}
         />
       )}
@@ -454,7 +467,13 @@ function ScenarioRow({ scenario, onView }) {
       <span className="fam-scenario-meta">
         <span className="mono">{scenario.scenario_id}</span>
         {scenario.toolCount != null && <span>{scenario.toolCount} tools</span>}
-        <span>{scenario.runCount} runs</span>
+        {inReview(scenario) ? (
+          <span className="badge badge-neutral" title={IN_REVIEW_BLURB}>
+            {IN_REVIEW_LABEL}
+          </span>
+        ) : (
+          <span>{scenario.runCount} runs</span>
+        )}
       </span>
     </button>
   );
