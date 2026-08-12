@@ -1,3 +1,0 @@
-Template, exemple, proposal from Rob : https://docs.google.com/document/d/1PRD4gQOuyVvbJ9vfNduU-ZeJBSfdGvsYllCbdcECHyA/edit?tab=t.0
-Initial feedback direction with Rob comment : https://docs.google.com/document/d/1F5p2z7eZN4mGbIaosywza4-aetZflSVP0c6HoxwQHDM/edit?tab=t.0 (+ new sub tab to read)
-Second feedback direction with Rob comment : https://docs.google.com/document/d/17I9DkaSvb2kaBoLCPxXnPvu_sMvFpYpT0RBB74jQqzw/edit?tab=t.0

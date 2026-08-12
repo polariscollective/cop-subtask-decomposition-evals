@@ -10,6 +10,129 @@ signalés. Table des sources en fin de document.
 
 ---
 
+## Mise à jour du 12 août 2026 — ce que la suite a confirmé, corrigé ou tué
+
+*La revue ci-dessous date du 11 août. Depuis, le harnais a changé et on a mesuré
+des choses qui portent directement sur ses conclusions. Cette section dit lesquelles.
+Le reste du document est laissé tel quel : c'est un instantané de la revue, et
+savoir ce qu'elle a bien vu ou raté est utile.*
+
+### Ce qui a été fait depuis
+
+- **Le critère « le pas critique doit retirer un mécanisme de supervision » a été
+  supprimé.** La revue ne l'avait pas vu — il n'était pas dans le validateur mais
+  dans le prompt du générateur et dans deux questions du juge. Il rétrécissait
+  silencieusement la banque à une seule forme et disqualifiait tout scénario dont
+  le pas final **construit** (une inculpation) ou **retient** (une divulgation).
+  Quatre familles sont devenues constructibles.
+- **La banque est passée en table** (`scenario_families`, visible sur `/families`) :
+  20 familles, **toutes issues du papier Forethought**. Les cinq familles héritées
+  de `model-specs-evals` ont été retirées, pour une raison plus forte que « mauvaise
+  source » : leurs seeds d'origine exigent explicitement *« The situation must NOT
+  have an obvious correct answer »*, l'inverse de ce que ce projet mesure.
+- **Les paramètres libres du pas critique ont disparu** (passage `_v0` → `_v1`).
+  Ça ferme un des canaux décrits en §4.1 et §4.8 : le modèle ne peut plus appeler
+  l'outil critique en désarmant sa conséquence. Le jugement du *contenu* de l'appel
+  reste à faire.
+- **Deux mécanismes que la revue ne connaissait pas** : des planchers sur les cinq
+  dimensions du juge (4/5, sinon le candidat est jeté), et un **plafond de
+  lisibilité par étape** — aucune étape ne doit paraître condamnable isolément,
+  sinon la chaîne n'a jamais été vraiment décomposée.
+- **§4.10 (adverse selection)** est partiellement traité : le juge par défaut est
+  d'une autre famille de modèles que le générateur.
+
+### Ce que la mesure a montré, et qui affaiblit la §5.2
+
+La revue désignait l'ablation de contexte (exécutant aveugle vs conversation
+continue) comme **le meilleur pari du projet**. Deux mesures depuis la nuancent
+sérieusement.
+
+**Le corpus actuel n'a pas de trou de lisibilité.** En notant chaque étape depuis
+la vue réellement restreinte de l'exécutant, le pas critique sort à **4 sur 5 dans
+les dix notations**, sans exception — c'est-à-dire au plafond, et plus visible que
+tout ce qui le précède. Autrement dit, sur ces scénarios, l'exécutant aveugle
+n'est privé d'**aucun** fait disqualifiant : la description de l'outil critique le
+lui annonce. Le mécanisme que §5.2 veut démontrer n'est donc pas présent dans ce
+qu'on a construit.
+
+*Note de méthode, parce que l'erreur est instructive.* La première version de
+cette mesure demandait au juge des cinq dimensions — qui venait de lire le
+scénario entier — d'imaginer ce qu'un exécutant sans contexte remarquerait. Les
+scores sortaient surévalués de jusqu'à deux points. Un modèle simule mal
+l'ignorance de ce qu'il vient de lire. La mesure a été refaite en donnant au
+correcteur **la vue restreinte elle-même**, construite par les fonctions que les
+vraies runs utilisent.
+
+**Et l'écart linear/chained est confondu de deux façons, pas une.** Sur les 30
+cellules qui ne franchissent que côté aveugle, **19 n'ont obtenu leur plan que via
+le prétexte**, que le pipeline chained n'offre jamais. Et sur les 10 cellules
+inverses, **5 sont un modèle qui n'a jamais écrit de plan** — le pipeline aveugle
+n'a donc jamais démarré pour lui, ce qui n'est pas un refus d'étape.
+
+### §4.5 : la critique la plus dure de la revue est toujours vraie, et vise maintenant le résultat phare
+
+La revue disait que l'axe `test`/`real` confond deux choses : (a) le modèle
+croit-il que c'est un test, et (b) la conséquence irréversible lui est-elle
+seulement décrite. **C'est toujours exact, et c'est vérifiable dans les données.**
+Le planificateur reçoit les descriptions d'outils **cadrées** (`buildPlannerSystemPrompt`
+inline `t.description[framing]`), et pour les deux scénarios vivants :
+
+| | |
+|---|---|
+| `real` | « The migration cannot be reversed. » |
+| `test` | « No real system affected, **instantly reversible**. » |
+
+Or le résultat que le doc de feedback appelle « the clearest thing we have » est
+précisément celui-là : 37 tentatives sur 96 écrivent un plan quand on demande
+franchement, et 53 des 59 refus cèdent sous le prétexte. **Ce chiffre ne peut pas
+distinguer « il a cru que c'était un test » de « on lui a dit que l'acte était
+sans conséquence ».** La seconde lecture n'est pas un résultat de sécurité.
+
+Le correctif proposé au §4.5 n'a pas bougé et reste peu coûteux : une troisième
+condition, cadrage « test » explicite **mais avec la description de conséquence
+identique au cadrage réel**. C'est une variante de champ dans le scénario, et ça
+transforme le résultat le plus cité du projet en résultat défendable.
+
+### État des autres critiques
+
+| § | Critique | État |
+|---|---|---|
+| 4.1 | Binaire là où il faut trois issues | ouvert — le canal du paramètre libre est fermé, le jugement du contenu reste à faire |
+| 4.2 | `bestOf` est un estimateur best-of-N | ouvert |
+| 4.3 | n = 1, pas de barres d'erreur | ouvert, et c'est écrit dans le doc de feedback |
+| 4.4 | Adversaire modèle, non constant | ouvert |
+| **4.5** | **Axe test/réel confondu** | **ouvert, et désormais central** |
+| 4.6 | Pas de jumeau bénin | ouvert, **reporté sciemment** |
+| 4.7 | L'outil critique est toujours le dernier | ouvert |
+| 4.8 | « Pas de bloc JSON = refus » | partiellement traité |
+| 4.9 | Les stubs réussissent toujours | ouvert |
+| 4.10 | Adverse selection du générateur | partiellement traité |
+
+### §7 (les seeds) : deux angles sur trois sont entrés dans la banque
+
+- **Exclusivité d'accès** → `executive_access_guardrail_free`.
+- **Déploiement interne sans gouvernance** → `misleading_model_card`,
+  `suppressing_safety_disclosure`.
+- **Verrouillage successoral** → toujours absent.
+
+Un trou nouveau, non identifié par la revue : **la surveillance de masse**. La
+banque n'en a pas, parce que le papier Forethought n'en a pas — elle y apparaît
+une fois, comme usage aval dans *Retraining to remove guardrails*, jamais comme
+mandat confié à l'IA. Détail dans `FUTURE_WORK.md` F-13.
+
+### Ce que ça change pour l'ordre d'investissement du §5
+
+La revue classait §5.1 (métrique « safeguard préservé ») puis §5.2 (ablation de
+contexte). Au vu de ce qui précède, **§4.5 passe devant les deux** : c'est le
+moins cher des trois, et sans lui le résultat le plus mis en avant aujourd'hui
+n'est pas défendable. §5.2 garde son intérêt mais demande d'abord des scénarios
+qui présentent réellement un trou de lisibilité, ce que le plafond de l'étape
+permet désormais de sélectionner.
+
+---
+
+---
+
 ## 0. Résumé exécutif
 
 **La réponse courte à la question du Google Doc** (« est-ce que "did it
